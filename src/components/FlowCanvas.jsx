@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useRef } from 'react'
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -21,6 +21,7 @@ const initialNodes = [
           <div className="text-sm text-gray-600">Central Hub</div>
         </div>
       ),
+      nodeType: 'status',
     },
     position: { x: 400, y: 200 },
     style: {
@@ -42,6 +43,7 @@ const initialNodes = [
           <div className="text-xs text-gray-500">USD</div>
         </div>
       ),
+      nodeType: 'income',
     },
     position: { x: 100, y: 100 },
     style: {
@@ -63,6 +65,7 @@ const initialNodes = [
           <div className="text-xs text-gray-500">USD</div>
         </div>
       ),
+      nodeType: 'expense',
     },
     position: { x: 700, y: 100 },
     style: {
@@ -77,9 +80,8 @@ const initialNodes = [
 
 const initialEdges = []
 
-let nodeId = 4
-
 const FlowCanvas = () => {
+  const nodeIdRef = useRef(4)
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
 
@@ -90,7 +92,7 @@ const FlowCanvas = () => {
 
   const addIncomeNode = () => {
     const newNode = {
-      id: `${nodeId++}`,
+      id: `${nodeIdRef.current++}`,
       type: 'default',
       data: {
         label: (
@@ -100,6 +102,7 @@ const FlowCanvas = () => {
             <div className="text-xs text-gray-500">USD</div>
           </div>
         ),
+        nodeType: 'income',
       },
       position: {
         x: Math.random() * 300 + 50,
@@ -118,7 +121,7 @@ const FlowCanvas = () => {
 
   const addExpenseNode = () => {
     const newNode = {
-      id: `${nodeId++}`,
+      id: `${nodeIdRef.current++}`,
       type: 'default',
       data: {
         label: (
@@ -128,6 +131,7 @@ const FlowCanvas = () => {
             <div className="text-xs text-gray-500">USD</div>
           </div>
         ),
+        nodeType: 'expense',
       },
       position: {
         x: Math.random() * 300 + 600,
@@ -173,8 +177,8 @@ const FlowCanvas = () => {
         <Controls />
         <MiniMap 
           nodeColor={(node) => {
-            if (node.style?.border?.includes('10B981')) return '#10B981'
-            if (node.style?.border?.includes('EF4444')) return '#EF4444'
+            if (node.data?.nodeType === 'income') return '#10B981'
+            if (node.data?.nodeType === 'expense') return '#EF4444'
             return '#0284C7'
           }}
           style={{
