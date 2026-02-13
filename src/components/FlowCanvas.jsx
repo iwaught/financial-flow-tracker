@@ -389,16 +389,21 @@ const FlowCanvas = () => {
     const incomeBreakdown = []
     const expenseBreakdown = []
 
-    // Calculate all original income sources (for total income)
+    // Helper to check if a node is connected to the graph
+    const isNodeConnected = (nodeId) => {
+      return edges.some(edge => edge.source === nodeId || edge.target === nodeId)
+    }
+
+    // Calculate all original income sources (ONLY if connected)
     nodes.forEach(node => {
-      if (node.data.nodeType === 'income') {
+      if (node.data.nodeType === 'income' && isNodeConnected(node.id)) {
         totalIncome += node.data.value || 0
       }
     })
 
-    // Calculate all expenses that were deducted along the flow paths (for total expenses)
+    // Calculate all expenses that were deducted along the flow paths (ONLY if connected)
     nodes.forEach(node => {
-      if (node.data.nodeType === 'expense') {
+      if (node.data.nodeType === 'expense' && isNodeConnected(node.id)) {
         totalExpenses += node.data.value || 0
         expenseBreakdown.push({
           label: node.data.label || 'Expense',
@@ -452,37 +457,50 @@ const FlowCanvas = () => {
     setEdges((eds) => eds.map(edge => {
       const flowAmount = edgeFlows.get(edge.id) || 0
       
-      // Calculate stroke width based on flow (min 1, max 8)
+      // Calculate stroke width based on flow (min 2, max 6 for better visibility)
       const maxFlow = Math.max(...Array.from(edgeFlows.values()), 1)
-      const minWidth = 1
-      const maxWidth = 8
+      const minWidth = 2
+      const maxWidth = 6
       const strokeWidth = Math.max(minWidth, Math.min(maxWidth, (flowAmount / maxFlow) * maxWidth))
       
-      // Calculate color intensity based on flow
-      // Higher flow = darker/more saturated color
-      const intensity = maxFlow > 0 ? Math.max(0.3, flowAmount / maxFlow) : 0.5
-      
-      // Determine color based on flow direction and amount
+      // Determine color based on flow amount - use vibrant colors to showcase money flow
       let strokeColor
+      let markerEnd
+      
       if (flowAmount > 0) {
-        // Green with varying intensity for positive flow
-        const greenValue = Math.round(16 + (177 - 16) * intensity) // #10B981 -> darker green
-        strokeColor = `rgb(${greenValue}, ${Math.round(185 * intensity)}, ${Math.round(129 * intensity)})`
-      } else if (flowAmount < 0) {
-        // Red for negative flow (shouldn't happen in normal flow)
-        strokeColor = '#EF4444'
+        // Use a beautiful gradient-like effect with green shades
+        // Higher flow = brighter, more vibrant green
+        const intensity = maxFlow > 0 ? (flowAmount / maxFlow) : 0.5
+        
+        // Beautiful vibrant green for money flow (#10B981 to #34D399)
+        const r = Math.round(16 + (52 - 16) * intensity)
+        const g = Math.round(185 + (211 - 185) * intensity)
+        const b = Math.round(129 + (153 - 129) * intensity)
+        strokeColor = `rgb(${r}, ${g}, ${b})`
+        
+        // Add arrow marker for flow direction
+        markerEnd = {
+          type: 'arrowclosed',
+          color: strokeColor,
+          width: 20,
+          height: 20,
+        }
       } else {
         // Gray for zero flow
-        strokeColor = '#9CA3AF'
+        strokeColor = '#D1D5DB'
+        markerEnd = undefined
       }
       
       return { 
         ...edge, 
         style: { 
           stroke: strokeColor, 
-          strokeWidth: strokeWidth 
+          strokeWidth: strokeWidth,
+          strokeLinecap: 'round',
         },
         animated: flowAmount > 0, // Animate edges with positive flow
+        markerEnd: markerEnd,
+        type: 'smoothstep', // Use smooth curved edges for better visual flow
       }
     }))
   }, [nodes, edges]) // Removed setEdges and setNodes as they are stable functions
