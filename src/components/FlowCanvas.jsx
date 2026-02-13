@@ -291,6 +291,7 @@ const FlowCanvas = () => {
   const [pdfPassword, setPdfPassword] = useState('')
   const [isImporting, setIsImporting] = useState(false)
   const [importMessage, setImportMessage] = useState('')
+  const [showPdfImport, setShowPdfImport] = useState(false)
   const fileInputRef = useRef(null)
 
   // Handle value changes for nodes
@@ -912,6 +913,17 @@ const FlowCanvas = () => {
     }
   }
 
+  // Helper to close and reset PDF import panel
+  const closePdfImport = () => {
+    setShowPdfImport(false)
+    setPdfFile(null)
+    setPdfPassword('')
+    setImportMessage('')
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
   // Main PDF import handler
   const handlePdfImport = async () => {
     if (!pdfFile) {
@@ -1137,11 +1149,27 @@ const FlowCanvas = () => {
         >
           📂 Load
         </button>
+        <button
+          onClick={() => setShowPdfImport(!showPdfImport)}
+          className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
+        >
+          📄 Import PDF
+        </button>
       </div>
 
       {/* PDF Import Section */}
-      <div className="absolute top-4 right-4 z-10 bg-white p-4 rounded-lg shadow-lg" style={{ maxWidth: '350px' }}>
-        <h3 className="text-sm font-bold mb-2">Import Credit Card PDF</h3>
+      {showPdfImport && (
+        <div className="absolute top-4 right-4 z-10 bg-white p-4 rounded-lg shadow-lg" style={{ maxWidth: '350px' }}>
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-sm font-bold">Import Credit Card PDF</h3>
+            <button
+              onClick={closePdfImport}
+              className="text-gray-500 hover:text-gray-700 font-bold text-lg leading-none"
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
         <div className="flex flex-col gap-2">
           <input
             ref={fileInputRef}
@@ -1181,6 +1209,7 @@ const FlowCanvas = () => {
           )}
         </div>
       </div>
+      )}
       
       <ReactFlow
         nodes={nodes}
