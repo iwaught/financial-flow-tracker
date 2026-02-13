@@ -389,21 +389,23 @@ const FlowCanvas = () => {
     const incomeBreakdown = []
     const expenseBreakdown = []
 
-    // Helper to check if a node is connected to the graph
-    const isNodeConnected = (nodeId) => {
-      return edges.some(edge => edge.source === nodeId || edge.target === nodeId)
-    }
+    // Pre-compute set of connected node IDs for performance
+    const connectedNodeIds = new Set()
+    edges.forEach(edge => {
+      connectedNodeIds.add(edge.source)
+      connectedNodeIds.add(edge.target)
+    })
 
     // Calculate all original income sources (ONLY if connected)
     nodes.forEach(node => {
-      if (node.data.nodeType === 'income' && isNodeConnected(node.id)) {
+      if (node.data.nodeType === 'income' && connectedNodeIds.has(node.id)) {
         totalIncome += node.data.value || 0
       }
     })
 
     // Calculate all expenses that were deducted along the flow paths (ONLY if connected)
     nodes.forEach(node => {
-      if (node.data.nodeType === 'expense' && isNodeConnected(node.id)) {
+      if (node.data.nodeType === 'expense' && connectedNodeIds.has(node.id)) {
         totalExpenses += node.data.value || 0
         expenseBreakdown.push({
           label: node.data.label || 'Expense',
