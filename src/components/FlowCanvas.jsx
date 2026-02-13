@@ -972,6 +972,11 @@ const FlowCanvas = () => {
       // Check for Chilean-specific payment terms or context
       const chileanTerms = [
         /información\s*de\s*pago/i, // "payment information" section header
+        /monto\s+(total|mínimo|a\s+pagar|facturado)/i,
+        /pago\s+(total|mínimo)/i,
+        /saldo\s+(total|actual)/i,
+        /costo\s+monetario/i,
+        /cargo\s+autom[aá]tico/i,
         /scotiabank/i,
         /banco\s*de\s*chile/i,
       ]
@@ -989,9 +994,131 @@ const FlowCanvas = () => {
     return 'USD' // Final fallback to USD
   }
 
+  const parseStatementAmount = (rawAmount, contextText = '', currencyHint = 'USD') => {
+    if (!rawAmount) return NaN
+
+    const sanitized = rawAmount
+      .toString()
+      .replace(/[^\d.,]/g, '')
+      .trim()
+
+    if (!sanitized) return NaN
+
+    const dotCount = (sanitized.match(/\./g) || []).length
+    const commaCount = (sanitized.match(/,/g) || []).length
+    const lowerContext = (contextText || '').toLowerCase()
+
+    // Pure thousands using dots (CLP style): 2.130.004 -> 2130004
+    if (/^\d{1,3}(?:\.\d{3})+$/.test(sanitized)) {
+      return parseFloat(sanitized.replace(/\./g, ''))
+    }
+
+    // Pure thousands using commas: 2,130,004 -> 2130004
+    if (/^\d{1,3}(?:,\d{3})+$/.test(sanitized)) {
+      return parseFloat(sanitized.replace(/,/g, ''))
+    }
+
+    // Mixed separators
+    if (dotCount > 0 && commaCount > 0) {
+      const lastDot = sanitized.lastIndexOf('.')
+      const lastComma = sanitized.lastIndexOf(',')
+
+      // Last separator usually indicates decimal separator
+      if (lastDot > lastComma) {
+        // 1,234.56
+        return parseFloat(sanitized.replace(/,/g, ''))
+      }
+
+      // 1.234,56
+      return parseFloat(sanitized.replace(/\./g, '').replace(',', '.'))
+    }
+
+    // Comma-only values
+    if (commaCount > 0 && dotCount === 0) {
+      if (/,\d{1,2}$/.test(sanitized)) {
+        return parseFloat(sanitized.replace(',', '.'))
+      }
+
+      return parseFloat(sanitized.replace(/,/g, ''))
+    }
+
+    // Dot-only values
+    if (dotCount > 0 && commaCount === 0) {
+      if (/\.\d{1,2}$/.test(sanitized)) {
+        return parseFloat(sanitized)
+      }
+
+      // Single dot + 3 digits can be thousands or decimal ambiguity.
+      // Favor thousands for CLP/Spanish payment context.
+      if (/\.\d{3}$/.test(sanitized)) {
+        const isLikelyChileanContext =
+          currencyHint === 'CLP' ||
+          /información\s*de\s*pago|monto|pago|scotiabank|chile|clp|peso/.test(lowerContext)
+
+        if (isLikelyChileanContext) {
+          return parseFloat(sanitized.replace(/\./g, ''))
+        }
+
+        const integerPart = parseInt(sanitized.split('.')[0], 10)
+        if (integerPart >= 100) {
+          return parseFloat(sanitized.replace(/\./g, ''))
+        }
+      }
+    }
+
+    return parseFloat(sanitized)
+  }
+
   // Helper function to extract payment amounts from PDF text
   const extractPaymentAmounts = (text) => {
     const payments = []
+
+    const isStrongPaymentLabel = (value = '') => {
+      const lower = value.toLowerCase()
+      return [
+        'monto total facturado a pagar',
+        'monto mínimo a pagar',
+        'monto a pagar',
+        'total a pagar',
+        'pago total',
+        'payment due',
+        'total payment',
+        'amount due',
+        'minimum payment',
+        'statement balance',
+      ].some((label) => lower.includes(label))
+    }
+
+    const isLikelyTransactionTableContext = (value = '') => {
+      const lower = value.toLowerCase()
+      return [
+        'lugar de operación',
+        'descripción operación',
+        'codigo referencia',
+        'n° cuota',
+        'valor cuota',
+        'monto operación o cobro',
+      ].some((token) => lower.includes(token))
+    }
+
+    // First pass: prioritize explicit payment label + amount pairs
+    const labelAmountPattern = /(monto\s+total\s+facturado\s+a\s+pagar|monto\s+m[ií]nimo\s+a\s+pagar|monto\s+a\s+pagar|total\s+a\s+pagar|pago\s+total|payment\s+due|total\s+payment|amount\s+due|minimum\s+payment|statement\s+balance)[^\d$€£¥]{0,40}(?:[$€£¥]\s*)?(\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)/gi
+
+    let labelMatch
+    while ((labelMatch = labelAmountPattern.exec(text)) !== null) {
+      const contextText = labelMatch[0]
+      const currency = detectCurrency(contextText)
+      const amount = parseStatementAmount(labelMatch[2], contextText, currency)
+
+      if (!isNaN(amount) && amount > 10 && amount < 100000000) {
+        payments.push({
+          amount,
+          currency,
+          rawAmount: labelMatch[2],
+          context: contextText.trim(),
+        })
+      }
+    }
     
     // Keywords that typically indicate payment amounts (English and Spanish)
     const keywords = [
@@ -1035,70 +1162,23 @@ const FlowCanvas = () => {
         // Look for amounts in this line and nearby lines
         const searchText = lines.slice(Math.max(0, i - 1), Math.min(lines.length, i + 3)).join(' ')
         
-        // Match currency amounts with various formats
-        // Supports: 1,234.56 | 1234.56 | 1.234,56 (European) | 2.130.004 (Chilean/pure thousands)
-        const amountRegex = /(?:[\$€£¥]|\b)(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?|\d{1,3}(?:\.\d{3})+(?:,\d{2})?|\d{1,3}(?:\.\d{3})+)/g
+        // Match full amount tokens and avoid fragmented captures like "2.13" + "004"
+        const amountRegex = /(?:[\$€£¥]\s*)?(\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)/g
         let match
         
         while ((match = amountRegex.exec(searchText)) !== null) {
-          let amountStr = match[1].replace(/[\s]/g, '') // Remove spaces
-          
-          // Determine format based on separators and their positions
-          const commaCount = (amountStr.match(/,/g) || []).length
-          const dotCount = (amountStr.match(/\./g) || []).length
-          
-          let amount
-          
-          // Case 1: Pure thousands with dots (Chilean format like 2.130.004)
-          // Multiple dots with 3-digit groups
-          if (dotCount > 1 && commaCount === 0) {
-            // Multiple dots: thousands separator format like 2.130.004 -> 2130004
-            amount = parseFloat(amountStr.replace(/\./g, ''))
-          }
-          // Case 2: Single dot with 3 trailing digits - ambiguous case
-          // Could be thousands (800.000 CLP) or decimal (123.456 USD)
-          // Use amount magnitude as heuristic: large amounts likely use thousands separator
-          else if (dotCount === 1 && commaCount === 0 && /\.\d{3}$/.test(amountStr)) {
-            const baseAmount = parseFloat(amountStr.substring(0, amountStr.indexOf('.')))
-            // If base amount is >= 100, more likely to be thousands separator
-            if (baseAmount >= 100) {
-              amount = parseFloat(amountStr.replace(/\./g, ''))
-            } else {
-              // Small base amount, treat as decimal
-              amount = parseFloat(amountStr)
-            }
-          }
-          // Case 3: US format with comma thousands and dot decimal (1,234.56)
-          // Commas for thousands, dot for decimal (last part has 1-2 digits)
-          else if (commaCount >= 1 && dotCount === 1 && /,\d{3}\.\d{1,2}$/.test(amountStr)) {
-            // US format: 1,234.56 -> 1234.56
-            amount = parseFloat(amountStr.replace(/,/g, ''))
-          }
-          // Case 4: European format with dot thousands and comma decimal (1.234,56)
-          // Dots for thousands, comma for decimal (last part has 1-2 digits)
-          else if (dotCount >= 1 && commaCount === 1 && /\.\d{3},\d{1,2}$/.test(amountStr)) {
-            // European format: 1.234,56 -> 1234.56
-            amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.'))
-          }
-          // Case 5: European format with only comma decimal (1234,56)
-          else if (commaCount === 1 && dotCount === 0 && /,\d{1,2}$/.test(amountStr)) {
-            // Could be European decimal: 1234,56 -> 1234.56
-            amount = parseFloat(amountStr.replace(',', '.'))
-          }
-          // Case 6: US format with only comma thousands (1,234) or plain number
-          else {
-            // US format or plain: remove commas
-            amount = parseFloat(amountStr.replace(/,/g, ''))
-          }
+          const contextCurrency = detectCurrency(searchText)
+          const amount = parseStatementAmount(match[1], searchText, contextCurrency)
           
           // Only include amounts that seem reasonable for credit card bills
           // Max amount set high to accommodate large CLP amounts
           const MAX_CREDIT_CARD_AMOUNT = 100000000 // 100 million in any currency
           if (!isNaN(amount) && amount > 10 && amount < MAX_CREDIT_CARD_AMOUNT) {
-            const currency = detectCurrency(searchText, amount)
+            const currency = contextCurrency
             payments.push({
               amount,
               currency,
+              rawAmount: match[1],
               context: line.trim(),
             })
           }
@@ -1106,7 +1186,7 @@ const FlowCanvas = () => {
       }
     }
 
-    // Remove duplicates and keep top 2 highest amounts
+    // Remove duplicates and rank candidates by payment relevance first
     const uniquePayments = []
     const seen = new Set()
     
@@ -1118,8 +1198,34 @@ const FlowCanvas = () => {
       }
     }
 
-    // Sort by amount descending and take top 2
-    return uniquePayments.sort((a, b) => b.amount - a.amount).slice(0, 2)
+    const scoredPayments = uniquePayments.map((payment) => {
+      let score = 0
+
+      if (isStrongPaymentLabel(payment.context)) {
+        score += 100
+      }
+
+      if (isLikelyTransactionTableContext(payment.context)) {
+        score -= 80
+      }
+
+      if (payment.currency === 'CLP') {
+        score += 20
+      }
+
+      return { ...payment, score }
+    })
+
+    const strongCandidates = scoredPayments.filter((payment) => payment.score >= 100)
+
+    const ranked = (strongCandidates.length > 0 ? strongCandidates : scoredPayments)
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score
+        return b.amount - a.amount
+      })
+      .slice(0, 2)
+
+    return ranked.map(({ score, ...payment }) => payment)
   }
 
   // Helper function to get FX rate with multi-provider fallback and caching
@@ -1285,6 +1391,8 @@ const FlowCanvas = () => {
 
         // Extract payment amounts
         const payments = extractPaymentAmounts(fullText)
+
+        console.log('[PDF Import] Selected payment candidates:', payments)
         
         if (payments.length === 0) {
           setImportMessage('No payment amounts found in PDF')
@@ -1312,12 +1420,18 @@ const FlowCanvas = () => {
             }
 
             conversions.push({
+              rawAmount: payment.rawAmount,
               original: payment.amount,
               currency: payment.currency,
               rate: fxResult.rate,
               usd: usdAmount,
               provider: fxResult.provider,
+              context: payment.context,
             })
+
+            console.log(
+              `[PDF Import] FX conversion: raw=${payment.rawAmount || 'n/a'} parsed=${payment.amount} ${payment.currency} rate=${fxResult.rate} provider=${fxResult.provider} usd=${usdAmount}`
+            )
           } catch (error) {
             // Log error but don't crash - use fallback if needed
             console.error(`FX conversion error for ${payment.currency}:`, error.message)
@@ -1398,12 +1512,19 @@ const FlowCanvas = () => {
         }
 
         // Show success message with conversion details
-        const conversionDetails = conversions.map(c => 
-          `${c.original.toFixed(AMOUNT_DECIMALS)} ${c.currency} × ${c.rate.toFixed(RATE_DECIMALS)} = $${c.usd.toFixed(AMOUNT_DECIMALS)} USD`
+        const extractionDetails = conversions.map((c, index) => {
+          const contextPreview = (c.context || '').replace(/\s+/g, ' ').trim().slice(0, 90)
+          return `${index + 1}) raw: ${c.rawAmount || 'n/a'} → parsed: ${c.original.toFixed(AMOUNT_DECIMALS)} ${c.currency} | context: ${contextPreview}`
+        }).join('\n')
+
+        const conversionDetails = conversions.map((c, index) => 
+          `${index + 1}) ${c.original.toFixed(AMOUNT_DECIMALS)} ${c.currency} × ${c.rate.toFixed(RATE_DECIMALS)} (${c.provider}) = $${c.usd.toFixed(AMOUNT_DECIMALS)} USD`
         ).join('\n')
         
         const successMsg = `Import successful!\n` +
           `Extracted ${payments.length} payment(s)\n` +
+          `Numbers used from PDF:\n${extractionDetails}\n` +
+          `FX conversions:\n` +
           conversionDetails + '\n' +
           `Total: $${totalUsd.toFixed(AMOUNT_DECIMALS)} USD` +
           (fxDate ? `\nFX Date: ${fxDate}` : '') +
