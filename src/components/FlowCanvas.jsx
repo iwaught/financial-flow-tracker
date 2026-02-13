@@ -1114,28 +1114,116 @@ const FlowCanvas = () => {
     return uniquePayments.sort((a, b) => b.amount - a.amount).slice(0, 2)
   }
 
-  // Helper function to get FX rate from Frankfurter API
+  // Helper function to get FX rate with multi-provider fallback and caching
   const getFxRate = async (fromCurrency, toCurrency = 'USD') => {
     if (fromCurrency === toCurrency) {
-      return { rate: 1, date: new Date().toISOString().split('T')[0] }
+      return { rate: 1, date: new Date().toISOString().split('T')[0], provider: 'none' }
     }
 
-    try {
-      // Use latest endpoint for daily spot rate
-      const response = await fetch(`https://api.frankfurter.app/latest?from=${fromCurrency}&to=${toCurrency}`)
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch exchange rate: ${response.statusText}`)
+    // Check cache first (24-hour TTL)
+    const cacheKey = `fx_rate_${fromCurrency}_${toCurrency}`
+    const cached = localStorage.getItem(cacheKey)
+    if (cached) {
+      try {
+        const { rate, date, timestamp, provider } = JSON.parse(cached)
+        const age = Date.now() - timestamp
+        const TTL = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+        
+        if (age < TTL) {
+          console.log(`FX cache hit: ${fromCurrency} → ${toCurrency} = ${rate} (${provider}, cached ${Math.round(age / 3600000)}h ago)`)
+          return { rate, date, provider: `${provider} (cached)` }
+        }
+      } catch (e) {
+        // Invalid cache entry, will fetch fresh data
       }
-
-      const data = await response.json()
-      return {
-        rate: data.rates[toCurrency],
-        date: data.date,
-      }
-    } catch (error) {
-      throw new Error(`FX conversion failed: ${error.message}`)
     }
+
+    // Multi-provider strategy with fallback
+    const providers = [
+      {
+        name: 'open.er-api.com',
+        fetch: async () => {
+          const response = await fetch(
+            `https://open.er-api.com/v6/latest/${fromCurrency}`,
+            { signal: AbortSignal.timeout(5000) }
+          )
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const data = await response.json()
+          if (data.result !== 'success') throw new Error('API returned error')
+          return {
+            rate: data.rates[toCurrency],
+            date: data.time_last_update_utc ? new Date(data.time_last_update_utc).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+          }
+        }
+      },
+      {
+        name: 'frankfurter.app',
+        fetch: async () => {
+          const response = await fetch(
+            `https://api.frankfurter.app/latest?from=${fromCurrency}&to=${toCurrency}`,
+            { signal: AbortSignal.timeout(5000) }
+          )
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const data = await response.json()
+          return {
+            rate: data.rates[toCurrency],
+            date: data.date
+          }
+        }
+      },
+      {
+        name: 'exchangerate-api.com',
+        fetch: async () => {
+          const response = await fetch(
+            `https://api.exchangerate-api.com/v4/latest/${fromCurrency}`,
+            { signal: AbortSignal.timeout(5000) }
+          )
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const data = await response.json()
+          return {
+            rate: data.rates[toCurrency],
+            date: data.date || new Date().toISOString().split('T')[0]
+          }
+        }
+      }
+    ]
+
+    const errors = []
+    
+    // Try each provider in sequence
+    for (const provider of providers) {
+      try {
+        console.log(`Trying FX provider: ${provider.name} for ${fromCurrency} → ${toCurrency}`)
+        const result = await provider.fetch()
+        
+        if (!result.rate || isNaN(result.rate)) {
+          throw new Error('Invalid rate received')
+        }
+
+        // Cache the successful result
+        localStorage.setItem(cacheKey, JSON.stringify({
+          rate: result.rate,
+          date: result.date,
+          timestamp: Date.now(),
+          provider: provider.name
+        }))
+
+        console.log(`FX success: ${fromCurrency} → ${toCurrency} = ${result.rate} (${provider.name}, ${result.date})`)
+        return {
+          rate: result.rate,
+          date: result.date,
+          provider: provider.name
+        }
+      } catch (error) {
+        const errorMsg = `${provider.name}: ${error.message}`
+        errors.push(errorMsg)
+        console.warn(`FX provider ${provider.name} failed:`, error.message)
+        // Continue to next provider
+      }
+    }
+
+    // All providers failed
+    throw new Error(`FX conversion failed: All providers unavailable. Tried: ${errors.join('; ')}`)
   }
 
   // Helper to close and reset PDF import panel
@@ -1201,22 +1289,35 @@ const FlowCanvas = () => {
         let totalUsd = 0
         const conversions = []
         let fxDate = null
+        let fxProvider = null
 
         for (const payment of payments) {
-          const fxResult = await getFxRate(payment.currency, 'USD')
-          const usdAmount = payment.amount * fxResult.rate
-          totalUsd += usdAmount
-          
-          if (!fxDate) {
-            fxDate = fxResult.date
-          }
+          try {
+            const fxResult = await getFxRate(payment.currency, 'USD')
+            const usdAmount = payment.amount * fxResult.rate
+            totalUsd += usdAmount
+            
+            if (!fxDate) {
+              fxDate = fxResult.date
+            }
+            if (!fxProvider) {
+              fxProvider = fxResult.provider
+            }
 
-          conversions.push({
-            original: payment.amount,
-            currency: payment.currency,
-            rate: fxResult.rate,
-            usd: usdAmount,
-          })
+            conversions.push({
+              original: payment.amount,
+              currency: payment.currency,
+              rate: fxResult.rate,
+              usd: usdAmount,
+              provider: fxResult.provider,
+            })
+          } catch (error) {
+            // Log error but don't crash - use fallback if needed
+            console.error(`FX conversion error for ${payment.currency}:`, error.message)
+            setImportMessage(`Error: ${error.message}. Please check your internet connection and try again.`)
+            setIsImporting(false)
+            return
+          }
         }
 
         // Round to 2 decimals
@@ -1289,11 +1390,17 @@ const FlowCanvas = () => {
           })
         }
 
-        // Show success message
+        // Show success message with conversion details
+        const conversionDetails = conversions.map(c => 
+          `${c.original.toFixed(2)} ${c.currency} × ${c.rate.toFixed(4)} = $${c.usd.toFixed(2)} USD`
+        ).join('\n')
+        
         const successMsg = `Import successful!\n` +
           `Extracted ${payments.length} payment(s)\n` +
+          conversionDetails + '\n' +
           `Total: $${totalUsd.toFixed(2)} USD` +
-          (fxDate ? `\nFX Date: ${fxDate}` : '')
+          (fxDate ? `\nFX Date: ${fxDate}` : '') +
+          (fxProvider ? `\nFX Provider: ${fxProvider}` : '')
         
         setImportMessage(successMsg)
         
