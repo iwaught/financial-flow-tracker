@@ -13,6 +13,8 @@ import ReactFlow, {
 import 'reactflow/dist/style.css'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { useAuth } from '../contexts/AuthContext'
+import { saveFlow, loadFlow } from '../lib/flowPersistence'
 
 // Configure PDF.js worker with local file
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
@@ -285,6 +287,7 @@ const FlowCanvas = () => {
   const nodeIdRef = useRef(5)
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  const { user, signOut } = useAuth()
   
   // PDF import state
   const [pdfFile, setPdfFile] = useState(null)
@@ -293,6 +296,11 @@ const FlowCanvas = () => {
   const [importMessage, setImportMessage] = useState('')
   const [showPdfImport, setShowPdfImport] = useState(false)
   const fileInputRef = useRef(null)
+
+  // Save/Load state
+  const [isSaving, setIsSaving] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [saveMessage, setSaveMessage] = useState('')
 
   // Handle value changes for nodes
   const handleValueChange = useCallback((nodeId, newValue) => {
@@ -354,6 +362,13 @@ const FlowCanvas = () => {
       }))
     )
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-load user's flow on mount
+  useEffect(() => {
+    if (user?.id) {
+      handleLoad()
+    }
+  }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Calculate flow amounts through the network and update edge styles
   useEffect(() => {
@@ -719,41 +734,58 @@ const FlowCanvas = () => {
     setNodes((nds) => nds.concat(newNode))
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     try {
-      const flowState = {
-        nodes: nodes.map(node => ({
-          ...node,
-          data: {
-            ...node.data,
-            // Remove function references before saving
-            onValueChange: undefined,
-            onLabelChange: undefined,
-            customLabel: undefined,
-          }
-        })),
-        edges,
-        nodeIdCounter: nodeIdRef.current,
+      setIsSaving(true)
+      setSaveMessage('')
+      
+      const cleanNodes = nodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          // Remove function references before saving
+          onValueChange: undefined,
+          onLabelChange: undefined,
+          customLabel: undefined,
+        }
+      }))
+
+      const { data, error } = await saveFlow(user.id, cleanNodes, edges)
+      
+      if (error) {
+        throw error
       }
-      localStorage.setItem('financial-flow-state', JSON.stringify(flowState))
-      alert('Flow saved successfully!')
+      
+      setSaveMessage('Flow saved successfully!')
+      setTimeout(() => setSaveMessage(''), 3000)
     } catch (error) {
-      alert('Error saving flow: ' + error.message)
+      console.error('Error saving flow:', error)
+      setSaveMessage('Error saving flow: ' + error.message)
+      setTimeout(() => setSaveMessage(''), 5000)
+    } finally {
+      setIsSaving(false)
     }
   }
 
-  const handleLoad = () => {
+  const handleLoad = async () => {
     try {
-      const saved = localStorage.getItem('financial-flow-state')
-      if (!saved) {
-        alert('No saved flow found')
+      setIsLoading(true)
+      setSaveMessage('')
+      
+      const { data, error } = await loadFlow(user.id)
+      
+      if (error) {
+        throw error
+      }
+      
+      if (!data || !data.nodes || data.nodes.length === 0) {
+        setSaveMessage('No saved flow found')
+        setTimeout(() => setSaveMessage(''), 3000)
         return
       }
       
-      const flowState = JSON.parse(saved)
-      
       // Restore nodes with onValueChange and onLabelChange functions
-      const restoredNodes = flowState.nodes.map(node => ({
+      const restoredNodes = data.nodes.map(node => ({
         ...node,
         data: {
           ...node.data,
@@ -763,14 +795,34 @@ const FlowCanvas = () => {
       }))
       
       setNodes(restoredNodes)
-      setEdges(flowState.edges || [])
-      if (flowState.nodeIdCounter) {
-        nodeIdRef.current = flowState.nodeIdCounter
-      }
+      setEdges(data.edges || [])
       
-      alert('Flow loaded successfully!')
+      // Update nodeIdRef to be higher than any existing node ID
+      const maxId = restoredNodes.reduce((max, node) => {
+        const nodeNum = parseInt(node.id)
+        return isNaN(nodeNum) ? max : Math.max(max, nodeNum)
+      }, 0)
+      nodeIdRef.current = maxId + 1
+      
+      setSaveMessage('Flow loaded successfully!')
+      setTimeout(() => setSaveMessage(''), 3000)
     } catch (error) {
-      alert('Error loading flow: ' + error.message)
+      console.error('Error loading flow:', error)
+      setSaveMessage('Error loading flow: ' + error.message)
+      setTimeout(() => setSaveMessage(''), 5000)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSignOut = async () => {
+    try {
+      const { error } = await signOut()
+      if (error) {
+        console.error('Error signing out:', error)
+      }
+    } catch (error) {
+      console.error('Error signing out:', error)
     }
   }
 
@@ -1186,6 +1238,30 @@ const FlowCanvas = () => {
 
   return (
     <div className="w-full h-full relative">
+      {/* Top bar with user info and logout */}
+      <div className="absolute top-4 right-4 z-10 flex gap-3 items-center">
+        <div className="bg-white px-3 py-2 rounded-lg shadow-lg text-sm">
+          <span className="text-gray-600">👤 {user?.email}</span>
+        </div>
+        <button
+          onClick={handleSignOut}
+          className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
+        >
+          Logout
+        </button>
+      </div>
+
+      {/* Save message */}
+      {saveMessage && (
+        <div className={`absolute top-20 right-4 z-10 px-4 py-2 rounded-lg shadow-lg text-sm ${
+          saveMessage.includes('Error') 
+            ? 'bg-red-500 text-white' 
+            : 'bg-green-500 text-white'
+        }`}>
+          {saveMessage}
+        </div>
+      )}
+
       <div className="absolute top-4 left-4 z-10 flex gap-3 flex-wrap">
         <button
           onClick={addAirbnbIncomeNode}
@@ -1219,14 +1295,25 @@ const FlowCanvas = () => {
         </button>
         <button
           onClick={handleSave}
-          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
+          disabled={isSaving}
+          className={`px-4 py-2 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200 ${
+            isSaving 
+              ? 'bg-blue-400 cursor-not-allowed' 
+              : 'bg-blue-500 hover:bg-blue-600'
+          }`}
         >
-          💾 Save
+          {isSaving ? '⏳ Saving...' : '💾 Save'}
         </button>
         <button
           onClick={handleLoad}
-          className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
+          disabled={isLoading}
+          className={`px-4 py-2 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200 ${
+            isLoading 
+              ? 'bg-purple-400 cursor-not-allowed' 
+              : 'bg-purple-500 hover:bg-purple-600'
+          }`}
         >
+          {isLoading ? '⏳ Loading...' : '📂 Load'}
           📂 Load
         </button>
         <button
