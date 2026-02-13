@@ -236,12 +236,35 @@ const initialNodes = [
       width: 150,
     },
   },
+  {
+    id: '4',
+    type: 'editable',
+    data: { 
+      label: 'Freelance Work',
+      nodeType: 'income',
+      value: 1500,
+    },
+    position: { x: 400, y: 100 },
+    style: {
+      background: '#D1FAE5',
+      border: '2px solid #10B981',
+      borderRadius: '8px',
+      padding: '12px',
+      width: 150,
+    },
+  },
 ]
 
 const initialEdges = [
   {
-    id: 'e2-3',
+    id: 'e2-4',
     source: '2',
+    target: '4',
+    type: 'default',
+  },
+  {
+    id: 'e4-3',
+    source: '4',
     target: '3',
     type: 'default',
   },
@@ -254,7 +277,7 @@ const initialEdges = [
 ]
 
 const FlowCanvas = () => {
-  const nodeIdRef = useRef(4)
+  const nodeIdRef = useRef(5)
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
 
@@ -344,9 +367,17 @@ const FlowCanvas = () => {
 
       let flow = 0
 
-      // For income nodes, flow is their value
+      // For income nodes, flow is their value PLUS any incoming flows
       if (node.data.nodeType === 'income') {
         flow = node.data.value || 0
+        // Add incoming flows from other income nodes (chained incomes)
+        edges.forEach(edge => {
+          if (edge.target === nodeId) {
+            const sourceFlow = computeNodeFlow(edge.source, new Set(visited))
+            flow += sourceFlow
+            edgeFlows.set(edge.id, sourceFlow)
+          }
+        })
       }
       // For expense nodes, flow is sum of incoming flows minus their value
       else if (node.data.nodeType === 'expense') {
@@ -480,12 +511,12 @@ const FlowCanvas = () => {
         const b = Math.round(129 + (153 - 129) * intensity)
         strokeColor = `rgb(${r}, ${g}, ${b})`
         
-        // Add arrow marker for flow direction
+        // Add arrow marker for flow direction (smaller size for better aesthetics)
         markerEnd = {
           type: 'arrowclosed',
           color: strokeColor,
-          width: 20,
-          height: 20,
+          width: 12,
+          height: 12,
         }
       } else {
         // Gray for zero flow
