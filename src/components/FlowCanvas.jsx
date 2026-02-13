@@ -15,6 +15,9 @@ import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { useAuth } from '../contexts/AuthContext'
 import { saveFlow, loadFlow } from '../lib/flowPersistence'
+import { ACHIEVEMENTS, getUserAchievements, checkAchievements } from '../lib/achievements'
+import AchievementToast from './AchievementToast'
+import AchievementsPanel from './AchievementsPanel'
 
 // Configure PDF.js worker with local file
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
@@ -302,6 +305,11 @@ const FlowCanvas = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
 
+  // Achievement state
+  const [unlockedAchievements, setUnlockedAchievements] = useState([])
+  const [currentToast, setCurrentToast] = useState(null)
+  const [showAchievementsPanel, setShowAchievementsPanel] = useState(false)
+
   // Handle value changes for nodes
   const handleValueChange = useCallback((nodeId, newValue) => {
     setNodes((nds) =>
@@ -369,6 +377,24 @@ const FlowCanvas = () => {
       handleLoad()
     }
   }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load user achievements on mount
+  useEffect(() => {
+    const loadAchievements = async () => {
+      if (user?.id) {
+        const { unlockedAchievements } = await getUserAchievements(user.id)
+        setUnlockedAchievements(unlockedAchievements)
+      }
+    }
+    loadAchievements()
+  }, [user?.id])
+
+  // Check for achievements when nodes or edges change
+  useEffect(() => {
+    if (user?.id && nodes.length > 0) {
+      checkForAchievements()
+    }
+  }, [nodes.length, edges.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Calculate flow amounts through the network and update edge styles
   useEffect(() => {
@@ -734,6 +760,30 @@ const FlowCanvas = () => {
     setNodes((nds) => nds.concat(newNode))
   }
 
+  // Check for newly unlocked achievements
+  const checkForAchievements = useCallback(async (justSaved = false) => {
+    if (!user?.id) return
+
+    const newlyUnlocked = await checkAchievements(
+      user.id,
+      nodes,
+      edges,
+      unlockedAchievements,
+      justSaved
+    )
+
+    if (newlyUnlocked.length > 0) {
+      // Update unlocked achievements list
+      setUnlockedAchievements((prev) => [...prev, ...newlyUnlocked])
+
+      // Show toast for first unlocked achievement
+      if (newlyUnlocked[0]) {
+        const achievement = ACHIEVEMENTS[newlyUnlocked[0]]
+        setCurrentToast(achievement)
+      }
+    }
+  }, [user?.id, nodes, edges, unlockedAchievements])
+
   const handleSave = async () => {
     try {
       setIsSaving(true)
@@ -758,6 +808,9 @@ const FlowCanvas = () => {
       
       setSaveMessage('Flow saved successfully!')
       setTimeout(() => setSaveMessage(''), 3000)
+
+      // Check for first save achievement
+      await checkForAchievements(true)
     } catch (error) {
       console.error('Error saving flow:', error)
       setSaveMessage('Error saving flow: ' + error.message)
@@ -1249,6 +1302,12 @@ const FlowCanvas = () => {
         >
           Logout
         </button>
+        <button
+          onClick={() => setShowAchievementsPanel(true)}
+          className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
+        >
+          🏆 Achievements ({unlockedAchievements.length}/{Object.keys(ACHIEVEMENTS).length})
+        </button>
       </div>
 
       {/* Save message */}
@@ -1314,7 +1373,6 @@ const FlowCanvas = () => {
           }`}
         >
           {isLoading ? '⏳ Loading...' : '📂 Load'}
-          📂 Load
         </button>
         <button
           onClick={() => setShowPdfImport(!showPdfImport)}
@@ -1402,6 +1460,23 @@ const FlowCanvas = () => {
         />
         <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
       </ReactFlow>
+
+      {/* Achievement Toast */}
+      {currentToast && (
+        <AchievementToast
+          achievement={currentToast}
+          onClose={() => setCurrentToast(null)}
+        />
+      )}
+
+      {/* Achievements Panel */}
+      <AchievementsPanel
+        isOpen={showAchievementsPanel}
+        onClose={() => setShowAchievementsPanel(false)}
+        unlockedAchievementIds={unlockedAchievements}
+        nodes={nodes}
+        edges={edges}
+      />
     </div>
   )
 }
