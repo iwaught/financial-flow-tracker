@@ -920,7 +920,7 @@ const FlowCanvas = () => {
     }
 
     // Validate file type
-    if (!pdfFile.name.toLowerCase().endsWith('.pdf') && pdfFile.type !== 'application/pdf') {
+    if (!pdfFile.name.toLowerCase().endsWith('.pdf') || pdfFile.type !== 'application/pdf') {
       setImportMessage('Error: Please select a valid PDF file')
       return
     }
