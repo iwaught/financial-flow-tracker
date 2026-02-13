@@ -1,18 +1,11 @@
-import { loadStripe } from '@stripe/stripe-js'
+// Stripe is disabled for simplified deployment
+// Billing feature is not available in this version
 
-// Feature flag for billing
-export const BILLING_ENABLED = import.meta.env.VITE_BILLING_ENABLED === 'true'
+// Feature flag for billing - always disabled
+export const BILLING_ENABLED = false
 
-// Stripe public key
-const stripePublicKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY || ''
-
-// Load Stripe instance
-let stripePromise = null
-if (BILLING_ENABLED && stripePublicKey) {
-  stripePromise = loadStripe(stripePublicKey)
-}
-
-export const getStripe = () => stripePromise
+// Stripe stub - returns null
+export const getStripe = () => null
 
 // Plan definitions
 export const PLANS = {
