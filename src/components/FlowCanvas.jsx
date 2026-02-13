@@ -380,6 +380,7 @@ const FlowCanvas = () => {
         })
       }
       // For expense nodes, flow is sum of incoming flows minus their value
+      // Allow negative flow to indicate deficit
       else if (node.data.nodeType === 'expense') {
         let incomingFlow = 0
         edges.forEach(edge => {
@@ -389,7 +390,7 @@ const FlowCanvas = () => {
             edgeFlows.set(edge.id, sourceFlow)
           }
         })
-        flow = Math.max(0, incomingFlow - (node.data.value || 0))
+        flow = incomingFlow - (node.data.value || 0)
       }
       // For status node, sum all incoming flows
       else if (node.data.nodeType === 'status') {
@@ -490,20 +491,20 @@ const FlowCanvas = () => {
     setEdges((eds) => eds.map(edge => {
       const flowAmount = edgeFlows.get(edge.id) || 0
       
-      // Calculate stroke width based on flow (min 2, max 6 for better visibility)
-      const maxFlow = Math.max(...Array.from(edgeFlows.values()), 1)
+      // Calculate stroke width based on absolute flow value (min 2, max 6 for better visibility)
+      const maxAbsFlow = Math.max(...Array.from(edgeFlows.values()).map(Math.abs), 1)
       const minWidth = 2
       const maxWidth = 6
-      const strokeWidth = Math.max(minWidth, Math.min(maxWidth, (flowAmount / maxFlow) * maxWidth))
+      const strokeWidth = Math.max(minWidth, Math.min(maxWidth, (Math.abs(flowAmount) / maxAbsFlow) * maxWidth))
       
-      // Determine color based on flow amount - use vibrant colors to showcase money flow
+      // Determine color based on flow amount
       let strokeColor
       let markerEnd
       
       if (flowAmount > 0) {
-        // Use a beautiful gradient-like effect with green shades
+        // Use a beautiful gradient-like effect with green shades for positive flow
         // Higher flow = brighter, more vibrant green
-        const intensity = maxFlow > 0 ? (flowAmount / maxFlow) : 0.5
+        const intensity = maxAbsFlow > 0 ? (flowAmount / maxAbsFlow) : 0.5
         
         // Beautiful vibrant green for money flow (#10B981 to #34D399)
         const r = Math.round(16 + (52 - 16) * intensity)
@@ -512,6 +513,23 @@ const FlowCanvas = () => {
         strokeColor = `rgb(${r}, ${g}, ${b})`
         
         // Add arrow marker for flow direction (smaller size for better aesthetics)
+        markerEnd = {
+          type: 'arrowclosed',
+          color: strokeColor,
+          width: 12,
+          height: 12,
+        }
+      } else if (flowAmount < 0) {
+        // Red for negative flow (deficit)
+        // Use red shades similar to expense nodes (#EF4444 to #DC2626)
+        const intensity = maxAbsFlow > 0 ? (Math.abs(flowAmount) / maxAbsFlow) : 0.5
+        
+        const r = Math.round(239 - (239 - 220) * intensity)
+        const g = Math.round(68 - (68 - 38) * intensity)
+        const b = Math.round(68 - (68 - 38) * intensity)
+        strokeColor = `rgb(${r}, ${g}, ${b})`
+        
+        // Add arrow marker for flow direction
         markerEnd = {
           type: 'arrowclosed',
           color: strokeColor,
@@ -531,7 +549,7 @@ const FlowCanvas = () => {
           strokeWidth: strokeWidth,
           strokeLinecap: 'round',
         },
-        animated: flowAmount > 0, // Animate edges with positive flow
+        animated: flowAmount !== 0, // Animate edges with non-zero flow
         markerEnd: markerEnd,
         type: 'smoothstep', // Use smooth curved edges for better visual flow
       }
