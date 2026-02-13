@@ -12,9 +12,10 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import * as pdfjsLib from 'pdfjs-dist'
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+// Configure PDF.js worker with local file
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 
 // Custom node component with editable value
 const EditableNode = ({ data, id }) => {
@@ -799,8 +800,9 @@ const FlowCanvas = () => {
   const extractPaymentAmounts = (text) => {
     const payments = []
     
-    // Keywords that typically indicate payment amounts
+    // Keywords that typically indicate payment amounts (English and Spanish)
     const keywords = [
+      // English
       'payment due',
       'total payment',
       'amount due',
@@ -810,6 +812,17 @@ const FlowCanvas = () => {
       'total balance',
       'payment amount',
       'amount owed',
+      'current balance',
+      'statement balance',
+      // Spanish
+      'pago total',
+      'pago mínimo',
+      'saldo total',
+      'saldo actual',
+      'monto a pagar',
+      'total a pagar',
+      'importe total',
+      'cuota',
     ]
 
     // Split text into lines for better processing
@@ -903,6 +916,12 @@ const FlowCanvas = () => {
   const handlePdfImport = async () => {
     if (!pdfFile) {
       setImportMessage('Please select a PDF file')
+      return
+    }
+
+    // Validate file type
+    if (!pdfFile.name.toLowerCase().endsWith('.pdf') && pdfFile.type !== 'application/pdf') {
+      setImportMessage('Error: Please select a valid PDF file')
       return
     }
 
@@ -1054,6 +1073,12 @@ const FlowCanvas = () => {
       } catch (pdfError) {
         if (pdfError.name === 'PasswordException') {
           setImportMessage('Wrong password. Please try again.')
+          setIsImporting(false)
+          return
+        } else if (pdfError.name === 'InvalidPDFException') {
+          setImportMessage('Invalid or corrupted PDF file. Please select a valid PDF.')
+          setIsImporting(false)
+          return
         } else {
           throw pdfError
         }
