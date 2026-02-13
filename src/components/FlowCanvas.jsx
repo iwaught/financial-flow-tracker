@@ -13,6 +13,14 @@ import ReactFlow, {
 import 'reactflow/dist/style.css'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { useAuth } from '../contexts/AuthContext'
+import { saveFlow, loadFlow } from '../lib/flowPersistence'
+import { ACHIEVEMENTS, getUserAchievements, checkAchievements } from '../lib/achievements'
+import AchievementToast from './AchievementToast'
+import AchievementsPanel from './AchievementsPanel'
+import { BILLING_ENABLED, PLANS, hasReachedPlanLimit } from '../lib/stripe'
+import { getUserSubscription } from '../lib/subscription'
+import UpgradeModal from './UpgradeModal'
 
 // Configure PDF.js worker with local file
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
@@ -285,6 +293,7 @@ const FlowCanvas = () => {
   const nodeIdRef = useRef(5)
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  const { user, signOut } = useAuth()
   
   // PDF import state
   const [pdfFile, setPdfFile] = useState(null)
@@ -293,6 +302,20 @@ const FlowCanvas = () => {
   const [importMessage, setImportMessage] = useState('')
   const [showPdfImport, setShowPdfImport] = useState(false)
   const fileInputRef = useRef(null)
+
+  // Save/Load state
+  const [isSaving, setIsSaving] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [saveMessage, setSaveMessage] = useState('')
+
+  // Achievement state
+  const [unlockedAchievements, setUnlockedAchievements] = useState([])
+  const [currentToast, setCurrentToast] = useState(null)
+  const [showAchievementsPanel, setShowAchievementsPanel] = useState(false)
+
+  // Billing state
+  const [subscription, setSubscription] = useState(null)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
   // Handle value changes for nodes
   const handleValueChange = useCallback((nodeId, newValue) => {
@@ -354,6 +377,42 @@ const FlowCanvas = () => {
       }))
     )
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-load user's flow on mount
+  useEffect(() => {
+    if (user?.id) {
+      handleLoad()
+    }
+  }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load user achievements on mount
+  useEffect(() => {
+    const loadAchievements = async () => {
+      if (user?.id) {
+        const { unlockedAchievements } = await getUserAchievements(user.id)
+        setUnlockedAchievements(unlockedAchievements)
+      }
+    }
+    loadAchievements()
+  }, [user?.id])
+
+  // Check for achievements when nodes or edges change
+  useEffect(() => {
+    if (user?.id && nodes.length > 0) {
+      checkForAchievements()
+    }
+  }, [nodes.length, edges.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load user subscription
+  useEffect(() => {
+    const loadSubscription = async () => {
+      if (user?.id) {
+        const { subscription } = await getUserSubscription(user.id)
+        setSubscription(subscription)
+      }
+    }
+    loadSubscription()
+  }, [user?.id])
 
   // Calculate flow amounts through the network and update edge styles
   useEffect(() => {
@@ -589,7 +648,21 @@ const FlowCanvas = () => {
     []
   )
 
+  // Check if user can add more boxes based on plan
+  const canAddBox = () => {
+    if (!BILLING_ENABLED) return true // Billing disabled, no limits
+    
+    const planCode = subscription?.plan_code || 'free'
+    if (hasReachedPlanLimit(nodes, planCode)) {
+      setShowUpgradeModal(true)
+      return false
+    }
+    return true
+  }
+
   const addIncomeNode = () => {
+    if (!canAddBox()) return
+
     const newNode = {
       id: `${nodeIdRef.current++}`,
       type: 'editable',
@@ -616,6 +689,8 @@ const FlowCanvas = () => {
   }
 
   const addAirbnbIncomeNode = () => {
+    if (!canAddBox()) return
+
     const newNode = {
       id: `${nodeIdRef.current++}`,
       type: 'editable',
@@ -642,6 +717,8 @@ const FlowCanvas = () => {
   }
 
   const addFreelanceIncomeNode = () => {
+    if (!canAddBox()) return
+
     const newNode = {
       id: `${nodeIdRef.current++}`,
       type: 'editable',
@@ -668,6 +745,8 @@ const FlowCanvas = () => {
   }
 
   const addExpenseNode = () => {
+    if (!canAddBox()) return
+
     const newNode = {
       id: `${nodeIdRef.current++}`,
       type: 'editable',
@@ -694,6 +773,8 @@ const FlowCanvas = () => {
   }
 
   const addRentExpenseNode = () => {
+    if (!canAddBox()) return
+
     const newNode = {
       id: `${nodeIdRef.current++}`,
       type: 'editable',
@@ -719,41 +800,85 @@ const FlowCanvas = () => {
     setNodes((nds) => nds.concat(newNode))
   }
 
-  const handleSave = () => {
-    try {
-      const flowState = {
-        nodes: nodes.map(node => ({
-          ...node,
-          data: {
-            ...node.data,
-            // Remove function references before saving
-            onValueChange: undefined,
-            onLabelChange: undefined,
-            customLabel: undefined,
-          }
-        })),
-        edges,
-        nodeIdCounter: nodeIdRef.current,
+  // Check for newly unlocked achievements
+  const checkForAchievements = useCallback(async (justSaved = false) => {
+    if (!user?.id) return
+
+    const newlyUnlocked = await checkAchievements(
+      user.id,
+      nodes,
+      edges,
+      unlockedAchievements,
+      justSaved
+    )
+
+    if (newlyUnlocked.length > 0) {
+      // Update unlocked achievements list
+      setUnlockedAchievements((prev) => [...prev, ...newlyUnlocked])
+
+      // Show toast for first unlocked achievement
+      if (newlyUnlocked[0]) {
+        const achievement = ACHIEVEMENTS[newlyUnlocked[0]]
+        setCurrentToast(achievement)
       }
-      localStorage.setItem('financial-flow-state', JSON.stringify(flowState))
-      alert('Flow saved successfully!')
+    }
+  }, [user?.id, nodes, edges, unlockedAchievements])
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true)
+      setSaveMessage('')
+      
+      const cleanNodes = nodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          // Remove function references before saving
+          onValueChange: undefined,
+          onLabelChange: undefined,
+          customLabel: undefined,
+        }
+      }))
+
+      const { data, error } = await saveFlow(user.id, cleanNodes, edges)
+      
+      if (error) {
+        throw error
+      }
+      
+      setSaveMessage('Flow saved successfully!')
+      setTimeout(() => setSaveMessage(''), 3000)
+
+      // Check for first save achievement
+      await checkForAchievements(true)
     } catch (error) {
-      alert('Error saving flow: ' + error.message)
+      console.error('Error saving flow:', error)
+      setSaveMessage('Error saving flow: ' + error.message)
+      setTimeout(() => setSaveMessage(''), 5000)
+    } finally {
+      setIsSaving(false)
     }
   }
 
-  const handleLoad = () => {
+  const handleLoad = async () => {
     try {
-      const saved = localStorage.getItem('financial-flow-state')
-      if (!saved) {
-        alert('No saved flow found')
+      setIsLoading(true)
+      setSaveMessage('')
+      
+      const { data, error } = await loadFlow(user.id)
+      
+      if (error) {
+        throw error
+      }
+      
+      if (!data || !data.nodes || data.nodes.length === 0) {
+        setSaveMessage('No saved flow found')
+        setTimeout(() => setSaveMessage(''), 3000)
         return
       }
       
-      const flowState = JSON.parse(saved)
-      
       // Restore nodes with onValueChange and onLabelChange functions
-      const restoredNodes = flowState.nodes.map(node => ({
+      const restoredNodes = data.nodes.map(node => ({
         ...node,
         data: {
           ...node.data,
@@ -763,14 +888,34 @@ const FlowCanvas = () => {
       }))
       
       setNodes(restoredNodes)
-      setEdges(flowState.edges || [])
-      if (flowState.nodeIdCounter) {
-        nodeIdRef.current = flowState.nodeIdCounter
-      }
+      setEdges(data.edges || [])
       
-      alert('Flow loaded successfully!')
+      // Update nodeIdRef to be higher than any existing node ID
+      const maxId = restoredNodes.reduce((max, node) => {
+        const nodeNum = parseInt(node.id)
+        return isNaN(nodeNum) ? max : Math.max(max, nodeNum)
+      }, 0)
+      nodeIdRef.current = maxId + 1
+      
+      setSaveMessage('Flow loaded successfully!')
+      setTimeout(() => setSaveMessage(''), 3000)
     } catch (error) {
-      alert('Error loading flow: ' + error.message)
+      console.error('Error loading flow:', error)
+      setSaveMessage('Error loading flow: ' + error.message)
+      setTimeout(() => setSaveMessage(''), 5000)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSignOut = async () => {
+    try {
+      const { error } = await signOut()
+      if (error) {
+        console.error('Error signing out:', error)
+      }
+    } catch (error) {
+      console.error('Error signing out:', error)
     }
   }
 
@@ -1186,6 +1331,58 @@ const FlowCanvas = () => {
 
   return (
     <div className="w-full h-full relative">
+      {/* Top bar with user info and logout */}
+      <div className="absolute top-4 right-4 z-10 flex gap-3 items-center">
+        <div className="bg-white px-3 py-2 rounded-lg shadow-lg text-sm">
+          <span className="text-gray-600">👤 {user?.email}</span>
+        </div>
+        
+        {/* Plan badge - only show if billing is enabled */}
+        {BILLING_ENABLED && subscription && (
+          <div className={`px-3 py-2 rounded-lg shadow-lg text-sm font-semibold ${
+            subscription.plan_code === 'pro' 
+              ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white' 
+              : 'bg-gray-200 text-gray-700'
+          }`}>
+            {subscription.plan_code === 'pro' ? '⭐ Pro' : '🆓 Free'}
+          </div>
+        )}
+
+        {/* Upgrade button - only show for free users if billing enabled */}
+        {BILLING_ENABLED && subscription?.plan_code === 'free' && (
+          <button
+            onClick={() => setShowUpgradeModal(true)}
+            className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold rounded-lg shadow-lg transition-all"
+          >
+            ⭐ Upgrade
+          </button>
+        )}
+
+        <button
+          onClick={handleSignOut}
+          className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
+        >
+          Logout
+        </button>
+        <button
+          onClick={() => setShowAchievementsPanel(true)}
+          className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
+        >
+          🏆 Achievements ({unlockedAchievements.length}/{Object.keys(ACHIEVEMENTS).length})
+        </button>
+      </div>
+
+      {/* Save message */}
+      {saveMessage && (
+        <div className={`absolute top-20 right-4 z-10 px-4 py-2 rounded-lg shadow-lg text-sm ${
+          saveMessage.includes('Error') 
+            ? 'bg-red-500 text-white' 
+            : 'bg-green-500 text-white'
+        }`}>
+          {saveMessage}
+        </div>
+      )}
+
       <div className="absolute top-4 left-4 z-10 flex gap-3 flex-wrap">
         <button
           onClick={addAirbnbIncomeNode}
@@ -1219,15 +1416,25 @@ const FlowCanvas = () => {
         </button>
         <button
           onClick={handleSave}
-          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
+          disabled={isSaving}
+          className={`px-4 py-2 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200 ${
+            isSaving 
+              ? 'bg-blue-400 cursor-not-allowed' 
+              : 'bg-blue-500 hover:bg-blue-600'
+          }`}
         >
-          💾 Save
+          {isSaving ? '⏳ Saving...' : '💾 Save'}
         </button>
         <button
           onClick={handleLoad}
-          className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
+          disabled={isLoading}
+          className={`px-4 py-2 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200 ${
+            isLoading 
+              ? 'bg-purple-400 cursor-not-allowed' 
+              : 'bg-purple-500 hover:bg-purple-600'
+          }`}
         >
-          📂 Load
+          {isLoading ? '⏳ Loading...' : '📂 Load'}
         </button>
         <button
           onClick={() => setShowPdfImport(!showPdfImport)}
@@ -1315,6 +1522,32 @@ const FlowCanvas = () => {
         />
         <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
       </ReactFlow>
+
+      {/* Achievement Toast */}
+      {currentToast && (
+        <AchievementToast
+          achievement={currentToast}
+          onClose={() => setCurrentToast(null)}
+        />
+      )}
+
+      {/* Achievements Panel */}
+      <AchievementsPanel
+        isOpen={showAchievementsPanel}
+        onClose={() => setShowAchievementsPanel(false)}
+        unlockedAchievementIds={unlockedAchievements}
+        nodes={nodes}
+        edges={edges}
+      />
+
+      {/* Upgrade Modal - only if billing enabled */}
+      {BILLING_ENABLED && (
+        <UpgradeModal
+          isOpen={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          currentPlan={subscription?.plan_code || 'free'}
+        />
+      )}
     </div>
   )
 }
