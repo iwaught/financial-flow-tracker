@@ -16,10 +16,17 @@ import 'reactflow/dist/style.css'
 const EditableNode = ({ data, id }) => {
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(data.value || 0)
+  const [showBreakdown, setShowBreakdown] = useState(false)
 
   const handleDoubleClick = () => {
     if (data.nodeType !== 'status') {
       setIsEditing(true)
+    }
+  }
+
+  const handleStatusClick = () => {
+    if (data.nodeType === 'status') {
+      setShowBreakdown(!showBreakdown)
     }
   }
 
@@ -47,6 +54,11 @@ const EditableNode = ({ data, id }) => {
     }).format(num)
   }
 
+  const formatPercentage = (value, total) => {
+    if (total === 0) return '0%'
+    return ((value / total) * 100).toFixed(1) + '%'
+  }
+
   const renderLabel = () => {
     if (data.nodeType === 'status') {
       const totalIncome = data.totalIncome || 0
@@ -55,8 +67,8 @@ const EditableNode = ({ data, id }) => {
       const netColorClass = netValue > 0 ? 'text-green-700' : netValue < 0 ? 'text-red-700' : 'text-gray-700'
       
       return (
-        <div className="text-center">
-          <div className="font-bold text-lg">Financial Status</div>
+        <div className="text-center" onClick={handleStatusClick}>
+          <div className="font-bold text-lg cursor-pointer hover:text-blue-600">Financial Status</div>
           <div className="text-xs text-gray-600 mt-1">
             <div>Income: {formatCurrency(totalIncome)}</div>
             <div>Expenses: {formatCurrency(totalExpenses)}</div>
@@ -64,6 +76,30 @@ const EditableNode = ({ data, id }) => {
               Net: {formatCurrency(netValue)}
             </div>
           </div>
+          {showBreakdown && (data.incomeBreakdown || data.expenseBreakdown) && (
+            <div className="mt-2 text-xs border-t pt-2">
+              {data.incomeBreakdown && data.incomeBreakdown.length > 0 && (
+                <div className="mb-2">
+                  <div className="font-semibold text-green-700">Income Sources:</div>
+                  {data.incomeBreakdown.map((item, idx) => (
+                    <div key={idx} className="text-left">
+                      {item.label}: {formatCurrency(item.value)} ({formatPercentage(item.value, totalIncome)})
+                    </div>
+                  ))}
+                </div>
+              )}
+              {data.expenseBreakdown && data.expenseBreakdown.length > 0 && (
+                <div>
+                  <div className="font-semibold text-red-700">Expenses:</div>
+                  {data.expenseBreakdown.map((item, idx) => (
+                    <div key={idx} className="text-left">
+                      {item.label}: {formatCurrency(item.value)} ({formatPercentage(item.value, totalExpenses)})
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )
     }
@@ -212,22 +248,34 @@ const FlowCanvas = () => {
 
     // Calculate total income from nodes connected TO the main status
     let totalIncome = 0
+    const incomeBreakdown = []
     edges.forEach(edge => {
       if (edge.target === '1') {
         const sourceNode = nodes.find(n => n.id === edge.source)
         if (sourceNode?.data?.nodeType === 'income') {
-          totalIncome += sourceNode.data.value || 0
+          const value = sourceNode.data.value || 0
+          totalIncome += value
+          incomeBreakdown.push({
+            label: sourceNode.data.label || 'Income',
+            value: value,
+          })
         }
       }
     })
 
     // Calculate total expenses from nodes connected FROM the main status
     let totalExpenses = 0
+    const expenseBreakdown = []
     edges.forEach(edge => {
       if (edge.source === '1') {
         const targetNode = nodes.find(n => n.id === edge.target)
         if (targetNode?.data?.nodeType === 'expense') {
-          totalExpenses += targetNode.data.value || 0
+          const value = targetNode.data.value || 0
+          totalExpenses += value
+          expenseBreakdown.push({
+            label: targetNode.data.label || 'Expense',
+            value: value,
+          })
         }
       }
     })
@@ -243,6 +291,8 @@ const FlowCanvas = () => {
             ...node.data,
             totalIncome,
             totalExpenses,
+            incomeBreakdown,
+            expenseBreakdown,
           },
         }
       }
