@@ -13,6 +13,11 @@ An interactive financial flow tracking application that helps you visualize mone
   - Blue central node for financial status
 - **Interactive Controls**: Zoom, pan, and fit view to navigate your financial landscape
 - **Real-time Updates**: See your financial structure update as you make changes
+- **PDF Import**: Import password-protected credit card statements to auto-create expense nodes
+  - Extracts payment amounts from PDF text
+  - Supports multiple languages (English, Spanish)
+  - Converts foreign currencies to USD using daily spot rates
+  - Handles password-protected PDFs securely in the browser
 
 ## Tech Stack
 
@@ -64,6 +69,21 @@ npm run preview
 4. **Add Expense**: Click the "Add Expense" button to create a new expense node
 5. **Navigate**: Use the controls in the bottom-right to zoom, pan, or fit all nodes in view
 6. **Mini Map**: Use the mini map in the bottom-left corner for quick navigation
+7. **Import PDF**: Use the "Import Credit Card PDF" panel to import payment data from statements
+   - Select a PDF file (password-protected PDFs supported)
+   - Enter the PDF password if required
+   - The app extracts payment amounts, converts to USD, and creates/updates an expense node
+
+### PDF Import Notes
+
+- **Supported formats**: Text-based PDFs (not scanned images)
+- **Password protection**: Fully supported with clear error messages for incorrect passwords
+- **Languages**: Recognizes payment keywords in English and Spanish
+- **Currency conversion**: Uses Frankfurter API for daily spot rates
+- **Limitations**: 
+  - Extracts up to 2 payment amounts per import
+  - Requires text-based PDFs (OCR not supported)
+  - Requires internet connection for currency conversion
 
 ## Project Structure
 
