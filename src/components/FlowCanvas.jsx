@@ -892,31 +892,43 @@ const FlowCanvas = () => {
         while ((match = amountRegex.exec(searchText)) !== null) {
           let amountStr = match[1].replace(/[\s]/g, '') // Remove spaces
           
-          // Determine format based on separators
+          // Determine format based on separators and their positions
           const commaCount = (amountStr.match(/,/g) || []).length
           const dotCount = (amountStr.match(/\./g) || []).length
           
           let amount
           
-          // Case 1: Pure thousands with dots (Chilean format like 2.130.004)
-          // Multiple dots, no commas, last segment has 3 digits
+          // Case 1: Pure thousands with dots (Chilean format like 2.130.004 or 800.000)
+          // Multiple dots with 3-digit groups, OR single dot with exactly 3 digits after
           if (dotCount > 1 && commaCount === 0) {
-            // This is thousands separator format: 2.130.004 -> 2130004
+            // Multiple dots: thousands separator format like 2.130.004 -> 2130004
             amount = parseFloat(amountStr.replace(/\./g, ''))
           }
-          // Case 2: European format with comma decimal (1.234,56)
-          else if (commaCount === 1 && dotCount >= 1) {
+          else if (dotCount === 1 && commaCount === 0 && /\.\d{3}$/.test(amountStr)) {
+            // Single dot with exactly 3 digits at end: could be thousands like 800.000 -> 800000
+            // This is common in Chilean/Spanish format
+            amount = parseFloat(amountStr.replace(/\./g, ''))
+          }
+          // Case 2: US format with comma thousands and dot decimal (1,234.56)
+          // Commas for thousands, dot for decimal (last part has 1-2 digits)
+          else if (commaCount >= 1 && dotCount === 1 && /\.\d{1,2}$/.test(amountStr)) {
+            // US format: 1,234.56 -> 1234.56
+            amount = parseFloat(amountStr.replace(/,/g, ''))
+          }
+          // Case 3: European format with dot thousands and comma decimal (1.234,56)
+          // Dots for thousands, comma for decimal (last part has 1-2 digits)
+          else if (dotCount >= 1 && commaCount === 1 && /,\d{1,2}$/.test(amountStr)) {
             // European format: 1.234,56 -> 1234.56
             amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.'))
           }
-          // Case 3: European format with only comma (1234,56)
-          else if (commaCount === 1 && dotCount === 0) {
+          // Case 4: European format with only comma decimal (1234,56)
+          else if (commaCount === 1 && dotCount === 0 && /,\d{1,2}$/.test(amountStr)) {
             // Could be European decimal: 1234,56 -> 1234.56
             amount = parseFloat(amountStr.replace(',', '.'))
           }
-          // Case 4: US format (1,234.56) or plain number
+          // Case 5: US format with only comma thousands (1,234) or plain number
           else {
-            // US format: 1,234.56 -> 1234.56
+            // US format or plain: remove commas
             amount = parseFloat(amountStr.replace(/,/g, ''))
           }
           
