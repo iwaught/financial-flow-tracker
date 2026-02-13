@@ -1,6 +1,6 @@
 Story ID,Story Name,Status,Assigned To,PR URL,Notes
 US-FFT-001,Airbnb revenue node and main connection,Done,,,"Added 'Add Airbnb Income' button, creates green income node labeled 'Airbnb Revenue' with $0 default value, can connect to main status node"
-US-FFT-002,Freelance income node,Todo,,,
+US-FFT-002,Freelance income node,Done,,,"Added 'Add Freelance Income' button, creates green income node labeled 'Freelance Work' with $0 default value, supports multiple instances"
 US-FFT-003,Rent expense node,Todo,,,
 US-FFT-004,Dynamic final edge color by net value,Todo,,,
 US-FFT-005,Editable node values,Todo,,,

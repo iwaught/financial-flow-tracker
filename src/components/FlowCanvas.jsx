@@ -148,6 +148,35 @@ const FlowCanvas = () => {
     setNodes((nds) => nds.concat(newNode))
   }
 
+  const addFreelanceIncomeNode = () => {
+    const newNode = {
+      id: `${nodeIdRef.current++}`,
+      type: 'default',
+      data: {
+        label: (
+          <div className="text-center">
+            <div className="font-semibold">Freelance Work</div>
+            <div className="text-sm font-bold text-green-700">$0</div>
+            <div className="text-xs text-gray-500">USD</div>
+          </div>
+        ),
+        nodeType: 'income',
+      },
+      position: {
+        x: Math.random() * 300 + 50,
+        y: Math.random() * 300 + 50,
+      },
+      style: {
+        background: '#D1FAE5',
+        border: '2px solid #10B981',
+        borderRadius: '8px',
+        padding: '12px',
+        width: 150,
+      },
+    }
+    setNodes((nds) => nds.concat(newNode))
+  }
+
   const addExpenseNode = () => {
     const newNode = {
       id: `${nodeIdRef.current++}`,
@@ -185,6 +214,12 @@ const FlowCanvas = () => {
           className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
         >
           + Add Airbnb Income
+        </button>
+        <button
+          onClick={addFreelanceIncomeNode}
+          className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
+        >
+          + Add Freelance Income
         </button>
         <button
           onClick={addIncomeNode}
