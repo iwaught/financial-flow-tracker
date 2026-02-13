@@ -785,7 +785,8 @@ const FlowCanvas = () => {
       /peso\s*chileno/i,
       /pesos\s*chilenos/i,
       /scotiabank\s*chile/i,
-      /chile\b/i,
+      /banco\s*de\s*chile/i,
+      /\bchile\s+(bank|peso|pesos)\b/i,
     ]
     
     for (const pattern of clpIndicators) {
@@ -814,24 +815,22 @@ const FlowCanvas = () => {
       }
     }
     
-    // If we see $ but no explicit USD marker, check for Spanish/Latin American context
+    // If we see $ but no explicit USD marker, check for Chilean-specific context
     if (/\$/.test(text)) {
-      // Spanish payment terms suggest CLP or other Latin currency
-      const spanishTerms = [
-        /pago/,
-        /monto/,
-        /saldo/,
-        /factura/,
-        /información\s*de\s*pago/i,
+      // Check for Chilean-specific payment terms or context
+      const chileanTerms = [
+        /información\s*de\s*pago/i, // "payment information" section header
+        /scotiabank/i,
+        /banco\s*de\s*chile/i,
       ]
       
-      for (const pattern of spanishTerms) {
+      for (const pattern of chileanTerms) {
         if (pattern.test(lowerText)) {
-          return 'CLP' // Assume CLP for Spanish context with $
+          return 'CLP' // Strong Chilean context with $
         }
       }
       
-      // Default $ to USD if no Spanish context
+      // Default $ to USD if no specific Chilean context
       return 'USD'
     }
 
@@ -898,43 +897,52 @@ const FlowCanvas = () => {
           
           let amount
           
-          // Case 1: Pure thousands with dots (Chilean format like 2.130.004 or 800.000)
-          // Multiple dots with 3-digit groups, OR single dot with exactly 3 digits after
+          // Case 1: Pure thousands with dots (Chilean format like 2.130.004)
+          // Multiple dots with 3-digit groups
           if (dotCount > 1 && commaCount === 0) {
             // Multiple dots: thousands separator format like 2.130.004 -> 2130004
             amount = parseFloat(amountStr.replace(/\./g, ''))
           }
+          // Case 2: Single dot with 3 trailing digits - ambiguous case
+          // Could be thousands (800.000 CLP) or decimal (123.456 USD)
+          // Use amount magnitude as heuristic: large amounts likely use thousands separator
           else if (dotCount === 1 && commaCount === 0 && /\.\d{3}$/.test(amountStr)) {
-            // Single dot with exactly 3 digits at end: could be thousands like 800.000 -> 800000
-            // This is common in Chilean/Spanish format
-            amount = parseFloat(amountStr.replace(/\./g, ''))
+            const baseAmount = parseFloat(amountStr.substring(0, amountStr.indexOf('.')))
+            // If base amount is >= 100, more likely to be thousands separator
+            if (baseAmount >= 100) {
+              amount = parseFloat(amountStr.replace(/\./g, ''))
+            } else {
+              // Small base amount, treat as decimal
+              amount = parseFloat(amountStr)
+            }
           }
-          // Case 2: US format with comma thousands and dot decimal (1,234.56)
+          // Case 3: US format with comma thousands and dot decimal (1,234.56)
           // Commas for thousands, dot for decimal (last part has 1-2 digits)
-          else if (commaCount >= 1 && dotCount === 1 && /\.\d{1,2}$/.test(amountStr)) {
+          else if (commaCount >= 1 && dotCount === 1 && /,\d{1,3}\.\d{1,2}$/.test(amountStr)) {
             // US format: 1,234.56 -> 1234.56
             amount = parseFloat(amountStr.replace(/,/g, ''))
           }
-          // Case 3: European format with dot thousands and comma decimal (1.234,56)
+          // Case 4: European format with dot thousands and comma decimal (1.234,56)
           // Dots for thousands, comma for decimal (last part has 1-2 digits)
-          else if (dotCount >= 1 && commaCount === 1 && /,\d{1,2}$/.test(amountStr)) {
+          else if (dotCount >= 1 && commaCount === 1 && /\.\d{1,3},\d{1,2}$/.test(amountStr)) {
             // European format: 1.234,56 -> 1234.56
             amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.'))
           }
-          // Case 4: European format with only comma decimal (1234,56)
+          // Case 5: European format with only comma decimal (1234,56)
           else if (commaCount === 1 && dotCount === 0 && /,\d{1,2}$/.test(amountStr)) {
             // Could be European decimal: 1234,56 -> 1234.56
             amount = parseFloat(amountStr.replace(',', '.'))
           }
-          // Case 5: US format with only comma thousands (1,234) or plain number
+          // Case 6: US format with only comma thousands (1,234) or plain number
           else {
             // US format or plain: remove commas
             amount = parseFloat(amountStr.replace(/,/g, ''))
           }
           
           // Only include amounts that seem reasonable for credit card bills
-          // Raised upper limit to accommodate CLP amounts
-          if (!isNaN(amount) && amount > 10 && amount < 100000000) {
+          // Max amount set high to accommodate large CLP amounts
+          const MAX_CREDIT_CARD_AMOUNT = 100000000 // 100 million in any currency
+          if (!isNaN(amount) && amount > 10 && amount < MAX_CREDIT_CARD_AMOUNT) {
             const currency = detectCurrency(searchText, amount)
             payments.push({
               amount,
