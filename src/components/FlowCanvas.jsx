@@ -776,9 +776,6 @@ const FlowCanvas = () => {
 
   // Helper function to detect currency from text
   const detectCurrency = (text, amount) => {
-    // Convert to lowercase for easier matching
-    const lowerText = text.toLowerCase()
-    
     // Check for explicit CLP indicators first (highest priority)
     const clpIndicators = [
       /\bclp\b/i,
@@ -799,9 +796,9 @@ const FlowCanvas = () => {
     // Note: $ is ambiguous - could be USD, CLP, CAD, AUD, etc.
     // Only match $ as USD if we don't have CLP context
     const currencyPatterns = [
-      { pattern: /€|EUR/i, code: 'EUR' },
-      { pattern: /£|GBP/i, code: 'GBP' },
-      { pattern: /¥|JPY/i, code: 'JPY' },
+      { pattern: /€|\bEUR\b/i, code: 'EUR' },
+      { pattern: /£|\bGBP\b/i, code: 'GBP' },
+      { pattern: /¥|\bJPY\b/i, code: 'JPY' },
       { pattern: /\bCNY\b/i, code: 'CNY' },
       { pattern: /\bCAD\b/i, code: 'CAD' },
       { pattern: /\bAUD\b/i, code: 'AUD' },
@@ -817,6 +814,8 @@ const FlowCanvas = () => {
     
     // If we see $ but no explicit USD marker, check for Chilean-specific context
     if (/\$/.test(text)) {
+      const lowerText = text.toLowerCase()
+      
       // Check for Chilean-specific payment terms or context
       const chileanTerms = [
         /información\s*de\s*pago/i, // "payment information" section header
@@ -918,13 +917,13 @@ const FlowCanvas = () => {
           }
           // Case 3: US format with comma thousands and dot decimal (1,234.56)
           // Commas for thousands, dot for decimal (last part has 1-2 digits)
-          else if (commaCount >= 1 && dotCount === 1 && /,\d{1,3}\.\d{1,2}$/.test(amountStr)) {
+          else if (commaCount >= 1 && dotCount === 1 && /,\d{3}\.\d{1,2}$/.test(amountStr)) {
             // US format: 1,234.56 -> 1234.56
             amount = parseFloat(amountStr.replace(/,/g, ''))
           }
           // Case 4: European format with dot thousands and comma decimal (1.234,56)
           // Dots for thousands, comma for decimal (last part has 1-2 digits)
-          else if (dotCount >= 1 && commaCount === 1 && /\.\d{1,3},\d{1,2}$/.test(amountStr)) {
+          else if (dotCount >= 1 && commaCount === 1 && /\.\d{3},\d{1,2}$/.test(amountStr)) {
             // European format: 1.234,56 -> 1234.56
             amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.'))
           }
