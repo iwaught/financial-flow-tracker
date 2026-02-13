@@ -69,22 +69,49 @@ npm run preview
 
 ```
 financial-flow-tracker/
+├── docs/
+│   ├── user-stories-and-tests.md    # User stories with acceptance criteria
+│   ├── user-stories-tracker.csv     # Excel-compatible tracker
+│   └── workflow-guide.md            # Development workflow guide
 ├── src/
 │   ├── components/
-│   │   └── FlowCanvas.jsx    # Main flow diagram component
-│   ├── App.jsx                # Root application component
-│   ├── main.jsx               # Application entry point
-│   └── index.css              # Global styles with Tailwind
-├── index.html                 # HTML entry point
-├── package.json               # Project dependencies
-├── vite.config.js             # Vite configuration
-├── tailwind.config.js         # Tailwind CSS configuration
-└── postcss.config.js          # PostCSS configuration
+│   │   └── FlowCanvas.jsx           # Main flow diagram component
+│   ├── App.jsx                       # Root application component
+│   ├── main.jsx                      # Application entry point
+│   └── index.css                     # Global styles with Tailwind
+├── index.html                        # HTML entry point
+├── package.json                      # Project dependencies
+├── vite.config.js                    # Vite configuration
+├── tailwind.config.js                # Tailwind CSS configuration
+└── postcss.config.js                 # PostCSS configuration
 ```
+
+## Development Workflow
+
+This project follows a story-driven development approach with user stories US-FFT-001 through US-FFT-010.
+
+### Documentation
+- **[User Stories & Test Cases](docs/user-stories-and-tests.md)** - Detailed user stories with acceptance criteria
+- **[Workflow Guide](docs/workflow-guide.md)** - Step-by-step development workflow for implementing stories
+- **[Tracker](docs/user-stories-tracker.csv)** - Excel-compatible tracker for planning and execution
+
+### Quick Start for Contributors
+1. Review the [workflow guide](docs/workflow-guide.md)
+2. Pick a user story from the [tracker](docs/user-stories-tracker.csv)
+3. Create a feature branch following the naming convention
+4. Implement the story following acceptance criteria
+5. Submit a PR with proper formatting
+
+For detailed instructions, see [docs/workflow-guide.md](docs/workflow-guide.md).
 
 ## Contributing
 
-Feel free to submit issues and enhancement requests!
+We welcome contributions! Please follow our development workflow:
+
+1. Check [docs/user-stories-tracker.csv](docs/user-stories-tracker.csv) for available stories
+2. Follow the workflow in [docs/workflow-guide.md](docs/workflow-guide.md)
+3. Submit issues for bugs or feature requests
+4. Follow the PR checklist when submitting pull requests
 
 ## License
 
