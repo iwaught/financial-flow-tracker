@@ -405,9 +405,62 @@ const FlowCanvas = () => {
     setNodes((nds) => nds.concat(newNode))
   }
 
+  const handleSave = () => {
+    try {
+      const flowState = {
+        nodes: nodes.map(node => ({
+          ...node,
+          data: {
+            ...node.data,
+            // Remove function references before saving
+            onValueChange: undefined,
+            customLabel: undefined,
+          }
+        })),
+        edges,
+        nodeIdCounter: nodeIdRef.current,
+      }
+      localStorage.setItem('financial-flow-state', JSON.stringify(flowState))
+      alert('Flow saved successfully!')
+    } catch (error) {
+      alert('Error saving flow: ' + error.message)
+    }
+  }
+
+  const handleLoad = () => {
+    try {
+      const saved = localStorage.getItem('financial-flow-state')
+      if (!saved) {
+        alert('No saved flow found')
+        return
+      }
+      
+      const flowState = JSON.parse(saved)
+      
+      // Restore nodes with onValueChange function
+      const restoredNodes = flowState.nodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          onValueChange: handleValueChange,
+        }
+      }))
+      
+      setNodes(restoredNodes)
+      setEdges(flowState.edges || [])
+      if (flowState.nodeIdCounter) {
+        nodeIdRef.current = flowState.nodeIdCounter
+      }
+      
+      alert('Flow loaded successfully!')
+    } catch (error) {
+      alert('Error loading flow: ' + error.message)
+    }
+  }
+
   return (
     <div className="w-full h-full relative">
-      <div className="absolute top-4 left-4 z-10 flex gap-3">
+      <div className="absolute top-4 left-4 z-10 flex gap-3 flex-wrap">
         <button
           onClick={addAirbnbIncomeNode}
           className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
@@ -437,6 +490,18 @@ const FlowCanvas = () => {
           className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
         >
           + Add Expense
+        </button>
+        <button
+          onClick={handleSave}
+          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
+        >
+          💾 Save
+        </button>
+        <button
+          onClick={handleLoad}
+          className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
+        >
+          📂 Load
         </button>
       </div>
       
