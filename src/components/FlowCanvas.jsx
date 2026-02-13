@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react'
+import React, { useCallback, useRef, useEffect } from 'react'
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -22,6 +22,7 @@ const initialNodes = [
         </div>
       ),
       nodeType: 'status',
+      value: 0,
     },
     position: { x: 400, y: 200 },
     style: {
@@ -44,6 +45,7 @@ const initialNodes = [
         </div>
       ),
       nodeType: 'income',
+      value: 3500,
     },
     position: { x: 100, y: 100 },
     style: {
@@ -66,6 +68,7 @@ const initialNodes = [
         </div>
       ),
       nodeType: 'expense',
+      value: 2200,
     },
     position: { x: 700, y: 100 },
     style: {
@@ -85,6 +88,61 @@ const FlowCanvas = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
 
+  // Calculate net value and update edge colors
+  useEffect(() => {
+    const mainStatusNode = nodes.find(n => n.id === '1')
+    if (!mainStatusNode) return
+
+    // Calculate total income from nodes connected TO the main status
+    let totalIncome = 0
+    edges.forEach(edge => {
+      if (edge.target === '1') {
+        const sourceNode = nodes.find(n => n.id === edge.source)
+        if (sourceNode?.data?.nodeType === 'income') {
+          totalIncome += sourceNode.data.value || 0
+        }
+      }
+    })
+
+    // Calculate total expenses from nodes connected FROM the main status
+    let totalExpenses = 0
+    edges.forEach(edge => {
+      if (edge.source === '1') {
+        const targetNode = nodes.find(n => n.id === edge.target)
+        if (targetNode?.data?.nodeType === 'expense') {
+          totalExpenses += targetNode.data.value || 0
+        }
+      }
+    })
+
+    const netValue = totalIncome - totalExpenses
+
+    // Update edge colors based on net value
+    setEdges((eds) => eds.map(edge => {
+      // Color edges from main status to expenses based on net value
+      if (edge.source === '1') {
+        const targetNode = nodes.find(n => n.id === edge.target)
+        if (targetNode?.data?.nodeType === 'expense') {
+          if (netValue > 0) {
+            return { ...edge, style: { stroke: '#10B981', strokeWidth: 2 } }
+          } else if (netValue < 0) {
+            return { ...edge, style: { stroke: '#EF4444', strokeWidth: 2 } }
+          } else {
+            return { ...edge, style: { stroke: '#6B7280', strokeWidth: 2 } }
+          }
+        }
+      }
+      // Income edges stay green
+      if (edge.target === '1') {
+        const sourceNode = nodes.find(n => n.id === edge.source)
+        if (sourceNode?.data?.nodeType === 'income') {
+          return { ...edge, style: { stroke: '#10B981', strokeWidth: 2 } }
+        }
+      }
+      return edge
+    }))
+  }, [nodes, edges, setEdges])
+
   const onConnect = useCallback(
     (params) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
@@ -103,6 +161,7 @@ const FlowCanvas = () => {
           </div>
         ),
         nodeType: 'income',
+        value: 0,
       },
       position: {
         x: Math.random() * 300 + 50,
@@ -132,6 +191,7 @@ const FlowCanvas = () => {
           </div>
         ),
         nodeType: 'income',
+        value: 0,
       },
       position: {
         x: Math.random() * 300 + 50,
@@ -161,6 +221,7 @@ const FlowCanvas = () => {
           </div>
         ),
         nodeType: 'income',
+        value: 0,
       },
       position: {
         x: Math.random() * 300 + 50,
@@ -190,6 +251,7 @@ const FlowCanvas = () => {
           </div>
         ),
         nodeType: 'expense',
+        value: 0,
       },
       position: {
         x: Math.random() * 300 + 600,
@@ -219,6 +281,7 @@ const FlowCanvas = () => {
           </div>
         ),
         nodeType: 'expense',
+        value: 0,
       },
       position: {
         x: Math.random() * 300 + 600,
