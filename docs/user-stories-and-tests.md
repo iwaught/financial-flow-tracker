@@ -1,324 +1,308 @@
-# Financial Flow Tracker - User Stories and Test Cases
+# User Stories and Test Cases
 
-This document defines all user stories for the Financial Flow Tracker application, including acceptance criteria and test cases for validation.
+This document contains all user stories for the Financial Flow Tracker project, along with their acceptance criteria and test cases.
 
-## Story Dependencies
+## Story US-FFT-001: Airbnb Revenue Node and Main Connection
 
-Stories should be implemented in order (US-FFT-001 through US-FFT-010) as they build upon each other progressively.
-
----
-
-## US-FFT-001: Airbnb Revenue Node and Main Connection
-
-**As a** user with Airbnb rental income  
-**I want** to add a specific Airbnb revenue node connected to my financial status  
-**So that** I can track my short-term rental income separately from other income sources
+**As a** user managing multiple income sources  
+**I want** to add an Airbnb revenue node that connects to my main financial status  
+**So that** I can track my Airbnb income separately from other sources
 
 ### Acceptance Criteria
-- [ ] A new "Airbnb Revenue" income node is created with appropriate styling (green border/background)
-- [ ] The node displays a label "Airbnb Revenue" and a sample amount (e.g., "+$1,200")
-- [ ] The node is automatically connected to the central "Financial Status" node with an edge
-- [ ] The connection edge is visible and properly styled
-- [ ] Node can be dragged and repositioned while maintaining the connection
+1. A new "Add Airbnb Income" button exists in the UI
+2. Clicking the button creates a green income node labeled "Airbnb Revenue"
+3. The node can be connected to the main financial status (blue) node
+4. The node has a default value display (e.g., "$0")
+5. The connection edge is visible and styled consistently
 
-### Test Case
-1. Load the application
-2. Verify an "Airbnb Revenue" node exists on the canvas
-3. Verify it has green styling (background: #D1FAE5, border: #10B981)
-4. Verify it displays "+$1,200" or similar amount
-5. Verify an edge connects it to the "Financial Status" node
-6. Drag the node and verify the edge follows the movement
+### Test Case TC-FFT-001
+- **Setup**: Open the application
+- **Action**: Click "Add Airbnb Income" button
+- **Expected**: 
+  - New green node appears labeled "Airbnb Revenue"
+  - Node can be dragged and positioned
+  - Node can connect to main status node
+  - Connection renders with appropriate styling
 
-**Branch name:** `feature/US-FFT-001-airbnb-revenue-node`
+### Branch Name
+`feature/US-FFT-001-airbnb-revenue-node`
 
 ---
 
-## US-FFT-002: Freelance Income Node with Connection
+## Story US-FFT-002: Freelance Income Node
 
-**As a** freelance worker  
-**I want** to add a freelance income node connected to my financial status  
-**So that** I can separately track my contract and project-based income
+**As a** freelancer tracking multiple income streams  
+**I want** to add a freelance income node  
+**So that** I can visualize my freelance earnings separately
 
 ### Acceptance Criteria
-- [ ] A new "Freelance Work" income node is created with green styling
-- [ ] The node displays a label "Freelance Work" and a sample amount (e.g., "+$2,100")
-- [ ] The node is automatically connected to the central "Financial Status" node
-- [ ] Multiple income nodes (Work Income, Airbnb, Freelance) can coexist
-- [ ] All income nodes maintain their individual connections to the main node
+1. A new "Add Freelance Income" button exists in the UI
+2. Clicking the button creates a green income node labeled "Freelance Work"
+3. The node can be connected to the main financial status node
+4. The node has an editable value field
+5. Multiple freelance nodes can be created
 
-### Test Case
-1. Load the application
-2. Verify both "Airbnb Revenue" and "Freelance Work" nodes exist
-3. Verify "Freelance Work" has green styling and displays "+$2,100"
-4. Verify edges connect both income nodes to "Financial Status"
-5. Verify no visual overlap between nodes
-6. Test dragging multiple nodes independently
+### Test Case TC-FFT-002
+- **Setup**: Open the application
+- **Action**: Click "Add Freelance Income" button multiple times
+- **Expected**: 
+  - Multiple green nodes appear, each labeled "Freelance Work"
+  - Each node has a unique ID
+  - All nodes can connect to the main status node
 
-**Branch name:** `feature/US-FFT-002-freelance-income-node`
+### Branch Name
+`feature/US-FFT-002-freelance-income-node`
 
 ---
 
-## US-FFT-003: Savings Goal Expense Node
+## Story US-FFT-003: Rent Expense Node
 
-**As a** user focused on saving money  
-**I want** to add a "Savings Goal" expense node connected from my financial status  
-**So that** I can visualize my savings as a planned allocation of funds
+**As a** user tracking my monthly expenses  
+**I want** to add a rent expense node  
+**So that** I can visualize my largest fixed expense
 
 ### Acceptance Criteria
-- [ ] A new "Savings Goal" expense node is created with red styling
-- [ ] The node displays a label "Savings Goal" and a sample amount (e.g., "-$1,500")
-- [ ] An edge connects from "Financial Status" to the "Savings Goal" node
-- [ ] The savings node uses the same styling as other expense nodes (background: #FEE2E2, border: #EF4444)
-- [ ] Multiple expense nodes can coexist without overlap
+1. A new "Add Rent Expense" button exists in the UI
+2. Clicking the button creates a red expense node labeled "Rent"
+3. The main status node can connect to the rent expense node
+4. The node has an editable value field for the monthly amount
+5. The expense is visually distinct from income nodes (red vs green)
 
-### Test Case
-1. Load the application
-2. Verify "Savings Goal" expense node exists alongside "Living Costs"
-3. Verify it has red styling and displays "-$1,500"
-4. Verify an edge connects from "Financial Status" to "Savings Goal"
-5. Verify both expense nodes are visually distinct and positioned appropriately
-6. Test that edges from status node flow to both expense nodes
+### Test Case TC-FFT-003
+- **Setup**: Open the application with main status node visible
+- **Action**: Click "Add Rent Expense" button
+- **Expected**: 
+  - New red node appears labeled "Rent"
+  - Node styling clearly indicates it's an expense (red border/background)
+  - Connection can be made from main status to rent expense
 
-**Branch name:** `feature/US-FFT-003-savings-goal-node`
+### Branch Name
+`feature/US-FFT-003-rent-expense-node`
 
 ---
 
-## US-FFT-004: Dynamic Edge Color Based on Net Value
+## Story US-FFT-004: Dynamic Final Edge Color by Net Value
 
-**As a** user monitoring my financial health  
-**I want** the final edge color to change based on whether I have positive or negative net value  
-**So that** I can quickly see if my income exceeds my expenses
+**As a** user analyzing my financial health  
+**I want** the connection from main status to expenses to change color based on whether I have positive or negative net value  
+**So that** I can quickly see if I'm spending within my means
 
 ### Acceptance Criteria
-- [ ] Calculate total income from all income nodes
-- [ ] Calculate total expenses from all expense nodes
-- [ ] Determine net value (income - expenses)
-- [ ] Add a final "Net Result" node showing the calculated net value
-- [ ] The edge connecting "Financial Status" to "Net Result" is green if net > 0
-- [ ] The edge is red if net < 0
-- [ ] The edge is gray if net = 0
-- [ ] Net value updates dynamically if node values change
+1. Calculate total income from all income nodes connected to main status
+2. Calculate total expenses from all expense nodes connected from main status
+3. If net value (income - expenses) is positive, final edges are green
+4. If net value is negative, final edges are red
+5. If net value is zero, final edges are neutral (gray or blue)
+6. Color updates dynamically as connections change
 
-### Test Case
-1. Load the application
-2. Verify a "Net Result" node exists showing calculated net value
-3. With sample data (total income > expenses), verify edge to "Net Result" is green
-4. Manually calculate: Income ($3,500 + $1,200 + $2,100) - Expenses ($2,200 + $1,500) = $3,100
-5. Verify "Net Result" displays "+$3,100"
-6. Verify the connecting edge is green (#10B981)
+### Test Case TC-FFT-004
+- **Setup**: Create 1 income node ($1000) and 1 expense node ($500) connected to main
+- **Action**: Observe the edge colors
+- **Expected**: 
+  - Edge from income to main is green
+  - Edge from main to expense shows green (positive net)
+- **Action**: Add another expense node ($600)
+- **Expected**: Edge from main to new expense shows red (negative net)
 
-**Branch name:** `feature/US-FFT-004-dynamic-edge-color`
+### Branch Name
+`feature/US-FFT-004-dynamic-edge-color`
 
 ---
 
-## US-FFT-005: Editable Node Values
+## Story US-FFT-005: Editable Node Values
 
-**As a** user with changing income and expenses  
-**I want** to edit the monetary values on nodes by clicking them  
-**So that** I can update my financial tracking as my situation changes
+**As a** user tracking specific amounts  
+**I want** to edit the monetary value on each income and expense node  
+**So that** I can accurately represent my financial situation
 
 ### Acceptance Criteria
-- [ ] Double-clicking a node opens an edit interface
-- [ ] User can enter a new numeric value for the node
-- [ ] Pressing Enter saves the new value
-- [ ] Pressing Escape cancels the edit
-- [ ] The node label updates to show the new value
-- [ ] Net value and edge colors recalculate based on updated values
-- [ ] Only numeric values (with optional decimal points) are accepted
+1. Each income and expense node displays an editable value field
+2. Double-clicking or clicking an edit icon allows value editing
+3. Values are formatted as currency (e.g., "$1,234.56")
+4. Invalid inputs (non-numeric) are rejected or sanitized
+5. Updated values persist during the session
+6. Main status node shows calculated total based on inputs
 
-### Test Case
-1. Load the application
-2. Double-click the "Airbnb Revenue" node
-3. Enter a new value "1500"
-4. Press Enter
-5. Verify node displays "+$1,500"
-6. Verify "Net Result" recalculates: ($3,500 + $1,500 + $2,100) - ($2,200 + $1,500) = $3,400
-7. Verify edge color remains green
-8. Test canceling an edit with Escape key
+### Test Case TC-FFT-005
+- **Setup**: Create an Airbnb income node
+- **Action**: Click on the value field and enter "2500"
+- **Expected**: 
+  - Value displays as "$2,500.00" or similar formatted currency
+  - Main status node updates to reflect this income
+  - Value persists when the node is moved
 
-**Branch name:** `feature/US-FFT-005-editable-node-values`
+### Branch Name
+`feature/US-FFT-005-editable-node-values`
 
 ---
 
-## US-FFT-006: Node Deletion with Recalculation
+## Story US-FFT-006: Main Status Box Calculation
 
-**As a** user managing my financial nodes  
-**I want** to delete nodes I no longer need  
-**So that** I can keep my flow diagram clean and relevant
+**As a** user monitoring my overall financial position  
+**I want** the main status box to automatically calculate and display my net value  
+**So that** I can see my financial health at a glance
 
 ### Acceptance Criteria
-- [ ] Clicking/selecting a node shows a delete button or allows Delete key press
-- [ ] Pressing Delete key removes the selected node
-- [ ] All edges connected to the deleted node are also removed
-- [ ] Net value recalculates after node deletion
-- [ ] Edge colors update based on new net value
-- [ ] The central "Financial Status" node cannot be deleted
-- [ ] Undo functionality is not required (out of scope)
+1. Main status node displays total income from all connected income nodes
+2. Main status node displays total expenses from all connected expense nodes
+3. Main status node displays net value (income - expenses)
+4. Calculations update in real-time as node values change
+5. Display is formatted clearly (e.g., "Net: $500" or "Balance: -$200")
+6. Visual indicator shows positive (green) or negative (red) status
 
-### Test Case
-1. Load the application
-2. Click to select the "Living Costs" expense node
-3. Press Delete key
-4. Verify the node is removed from the canvas
-5. Verify its connecting edge is also removed
-6. Verify "Net Result" recalculates: ($3,500 + $1,500 + $2,100) - ($1,500) = $5,600
-7. Verify edge color is green
-8. Try to delete "Financial Status" and verify it's protected
+### Test Case TC-FFT-006
+- **Setup**: Create 2 income nodes ($1000, $500) and 1 expense node ($800)
+- **Action**: Connect all to main status node
+- **Expected**: 
+  - Main status shows "Total Income: $1,500"
+  - Main status shows "Total Expenses: $800"
+  - Main status shows "Net: $700" in green
 
-**Branch name:** `feature/US-FFT-006-node-deletion`
+### Branch Name
+`feature/US-FFT-006-main-status-calculation`
 
 ---
 
-## US-FFT-007: Custom Node Labels
+## Story US-FFT-007: Save and Load Flow State
 
-**As a** user with diverse income and expense sources  
-**I want** to customize the label/name of nodes  
-**So that** I can accurately describe my specific financial flows
+**As a** user building my financial flow over time  
+**I want** to save my current flow diagram and load it later  
+**So that** I don't lose my work between sessions
 
 ### Acceptance Criteria
-- [ ] Double-clicking a node's label area opens an edit interface for the label
-- [ ] User can enter custom text for the node name
-- [ ] Pressing Enter saves the new label
-- [ ] Pressing Escape cancels the edit
-- [ ] The node displays the updated label
-- [ ] Labels can include spaces and special characters
-- [ ] Maximum label length is enforced (e.g., 30 characters)
+1. A "Save" button exports the current flow state to local storage or JSON file
+2. A "Load" button imports a previously saved flow state
+3. All nodes, edges, positions, and values are preserved
+4. User receives confirmation when save/load is successful
+5. Invalid or corrupted save data shows appropriate error message
 
-### Test Case
-1. Load the application
-2. Double-click the "Airbnb Revenue" node label
-3. Enter "Vacation Rental - Miami"
-4. Press Enter
-5. Verify node displays "Vacation Rental - Miami"
-6. Verify the monetary value remains unchanged
-7. Test editing another node with a longer label
-8. Verify long labels are truncated or wrapped appropriately
+### Test Case TC-FFT-007
+- **Setup**: Create a complete flow with 3 income and 2 expense nodes
+- **Action**: Click "Save" button
+- **Expected**: Success message appears
+- **Action**: Refresh page and click "Load" button
+- **Expected**: 
+  - All nodes reappear in same positions
+  - All connections are restored
+  - All values are preserved
 
-**Branch name:** `feature/US-FFT-007-custom-node-labels`
+### Branch Name
+`feature/US-FFT-007-save-load-state`
 
 ---
 
-## US-FFT-008: Main Status Box Breakdown Panel
+## Story US-FFT-008: Main Box Contribution Breakdown Panel
 
-**As a** user wanting detailed insights  
-**I want** to click the "Financial Status" node to see a detailed breakdown  
-**So that** I can view a summary of all my income and expense contributions
+**As a** user analyzing my income and expense composition  
+**I want** a detailed breakdown panel showing each connected node's contribution  
+**So that** I can understand the percentage breakdown of my finances
 
 ### Acceptance Criteria
-- [ ] Clicking the "Financial Status" node opens a side panel or modal
-- [ ] Panel displays a list of all income sources with their values
-- [ ] Panel displays a list of all expense sources with their values
-- [ ] Panel shows calculated total income
-- [ ] Panel shows calculated total expenses
-- [ ] Panel shows net value with color coding (green if positive, red if negative)
-- [ ] Panel can be closed by clicking outside or a close button
-- [ ] Panel updates in real-time as values change
+1. A panel or tooltip shows when hovering/clicking the main status node
+2. Panel lists all income sources with their amounts and percentages
+3. Panel lists all expenses with their amounts and percentages
+4. Percentages are calculated relative to total income or total expenses
+5. Panel updates dynamically as values or connections change
+6. Panel is visually clear and easy to read
 
-### Test Case
-1. Load the application
-2. Click the "Financial Status" node
-3. Verify a breakdown panel appears
-4. Verify it lists all income nodes with their values
-5. Verify it lists all expense nodes with their values
-6. Verify total income sum is correct
-7. Verify total expenses sum is correct
-8. Verify net value calculation is correct
-9. Close panel and verify it disappears
+### Test Case TC-FFT-008
+- **Setup**: Create income nodes: Airbnb ($1000), Freelance ($500)
+- **Action**: Click on main status node
+- **Expected**: 
+  - Panel shows "Airbnb: $1,000 (66.7%)"
+  - Panel shows "Freelance: $500 (33.3%)"
+  - Panel shows "Total Income: $1,500"
 
-**Branch name:** `feature/US-FFT-008-status-breakdown-panel`
+### Branch Name
+`feature/US-FFT-008-contribution-breakdown-panel`
 
 ---
 
-## US-FFT-009: Local Storage Persistence
+## Story US-FFT-009: Delete Nodes and Connections
 
-**As a** user who frequently updates my financial tracking  
-**I want** my flow diagram to be saved automatically  
-**So that** I don't lose my data when I close and reopen the browser
+**As a** user refining my financial model  
+**I want** to delete nodes and connections I no longer need  
+**So that** I can keep my flow diagram clean and accurate
 
 ### Acceptance Criteria
-- [ ] All nodes (positions, labels, values) are saved to browser localStorage
-- [ ] All edges are saved to browser localStorage
-- [ ] Data is saved automatically whenever changes occur (debounced)
-- [ ] On page load, saved data is restored if available
-- [ ] If no saved data exists, default initial nodes are shown
-- [ ] A "Clear All Data" button allows users to reset to defaults
-- [ ] Saving occurs without noticeable performance impact
+1. Each node has a delete button or responds to delete key when selected
+2. Deleting a node also removes all its connections
+3. User sees confirmation dialog before deletion (optional but recommended)
+4. Deleted nodes are removed from calculations immediately
+5. Main status node cannot be deleted
+6. Undo functionality would be a bonus
 
-### Test Case
-1. Load the application and make changes (add nodes, edit values)
-2. Refresh the browser
-3. Verify all nodes and edges are restored
-4. Verify custom labels and values are preserved
-5. Verify node positions are maintained
-6. Click "Clear All Data" button
-7. Verify application resets to initial default state
-8. Refresh and verify defaults persist
+### Test Case TC-FFT-009
+- **Setup**: Create 3 income nodes connected to main
+- **Action**: Select one income node and press delete key (or click delete icon)
+- **Expected**: 
+  - Node disappears from canvas
+  - Connection to main status is removed
+  - Main status calculation updates to exclude deleted node
+  - Remaining nodes are unaffected
 
-**Branch name:** `feature/US-FFT-009-local-storage-persistence`
+### Branch Name
+`feature/US-FFT-009-delete-nodes-connections`
 
 ---
 
-## US-FFT-010: Export Flow as Image
+## Story US-FFT-010: Custom Node Labels
 
-**As a** user wanting to share my financial flow  
-**I want** to export my flow diagram as an image file  
-**So that** I can include it in reports or share it with others
+**As a** user with specific income sources and expenses  
+**I want** to customize the label/name of each node  
+**So that** I can represent my unique financial situation accurately
 
 ### Acceptance Criteria
-- [ ] An "Export as Image" button is visible in the UI
-- [ ] Clicking the button generates a PNG image of the current flow diagram
-- [ ] The image includes all visible nodes and edges
-- [ ] The image has a white or transparent background
-- [ ] The image is automatically downloaded to the user's device
-- [ ] File is named with a timestamp (e.g., "financial-flow-2026-02-13.png")
-- [ ] Image quality is sufficient for viewing and printing (minimum 1920x1080)
+1. Each node has an editable label field (separate from value)
+2. Double-clicking label allows editing
+3. Label updates are reflected immediately in the node
+4. Labels are preserved in save/load functionality
+5. Labels can be any text (e.g., "Side Hustle Income", "Car Payment")
+6. Default labels are still provided for new nodes
 
-### Test Case
-1. Load the application with custom nodes and connections
-2. Click "Export as Image" button
-3. Verify a PNG file is downloaded
-4. Open the downloaded image
-5. Verify all nodes are visible and readable
-6. Verify all edges are visible
-7. Verify image quality is high
-8. Verify filename includes date/timestamp
-9. Test export with different zoom levels and canvas positions
+### Test Case TC-FFT-010
+- **Setup**: Create a generic income node (default label: "Income Source")
+- **Action**: Double-click the label and enter "YouTube Revenue"
+- **Expected**: 
+  - Node label updates to "YouTube Revenue"
+  - Label persists when node is moved
+  - Label is saved/loaded correctly
+- **Action**: Create another income node and leave default label
+- **Expected**: New node shows default label "Income Source" with unique ID
 
-**Branch name:** `feature/US-FFT-010-export-as-image`
-
----
-
-## Testing Guidelines
-
-### Manual Testing
-For each story, perform the test case steps manually in a development environment:
-```bash
-npm run dev
-```
-
-### Build Validation
-After implementing each story, ensure the build succeeds:
-```bash
-npm run build
-```
-
-### Cross-Browser Testing (Optional)
-Test in at least two browsers (e.g., Chrome and Firefox) to ensure compatibility.
-
-### Regression Testing
-When implementing later stories, verify earlier functionality still works:
-- Income and expense node creation
-- Dragging and connecting nodes
-- Visual styling remains consistent
-- No console errors appear
+### Branch Name
+`feature/US-FFT-010-custom-node-labels`
 
 ---
 
-## Notes
+## Branch-to-Story Mapping Summary
 
-- All monetary values should display with 2 decimal places for consistency
-- Currency symbol ($) should precede amounts
-- Positive values (income) should show with a "+" prefix
-- Negative values (expenses) should show with a "-" prefix
-- Node IDs should be unique and auto-incrementing
-- Edge IDs should follow the pattern "e{sourceId}-{targetId}"
+| Story ID | Branch Name | Short Description |
+|----------|-------------|-------------------|
+| US-FFT-001 | feature/US-FFT-001-airbnb-revenue-node | Airbnb revenue node and main connection |
+| US-FFT-002 | feature/US-FFT-002-freelance-income-node | Freelance income node |
+| US-FFT-003 | feature/US-FFT-003-rent-expense-node | Rent expense node |
+| US-FFT-004 | feature/US-FFT-004-dynamic-edge-color | Dynamic final edge color by net value |
+| US-FFT-005 | feature/US-FFT-005-editable-node-values | Editable node values |
+| US-FFT-006 | feature/US-FFT-006-main-status-calculation | Main status box calculation |
+| US-FFT-007 | feature/US-FFT-007-save-load-state | Save and load flow state |
+| US-FFT-008 | feature/US-FFT-008-contribution-breakdown-panel | Main box contribution breakdown panel |
+| US-FFT-009 | feature/US-FFT-009-delete-nodes-connections | Delete nodes and connections |
+| US-FFT-010 | feature/US-FFT-010-custom-node-labels | Custom node labels |
+
+---
+
+## Implementation Notes
+
+### Dependencies Between Stories
+- **US-FFT-001, 002, 003**: Can be implemented independently, establish the node creation pattern
+- **US-FFT-004**: Depends on having multiple nodes (001, 002, 003)
+- **US-FFT-005**: Should be implemented before or alongside 006
+- **US-FFT-006**: Depends on 005 for value inputs
+- **US-FFT-007**: Should come after core functionality is stable
+- **US-FFT-008**: Depends on 006 for calculation logic
+- **US-FFT-009**: Can be implemented anytime after node creation
+- **US-FFT-010**: Can be implemented anytime, enhances existing nodes
+
+### Recommended Implementation Order
+Follow the order listed in the problem statement (US-FFT-001 through US-FFT-010) as it builds features incrementally from basic to advanced.
