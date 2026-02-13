@@ -1,7 +1,10 @@
-import { supabase } from './supabase'
+// Flow persistence using localStorage instead of Supabase
+// Data is stored locally in the browser
+
+const STORAGE_KEY = 'financial-flow-data'
 
 /**
- * Save flow data to Supabase
+ * Save flow data to localStorage
  * @param {string} userId - The authenticated user ID
  * @param {Array} nodes - Array of flow nodes
  * @param {Array} edges - Array of flow edges
@@ -10,19 +13,6 @@ import { supabase } from './supabase'
  */
 export const saveFlow = async (userId, nodes, edges, flowName = 'My Flow') => {
   try {
-    if (!userId) {
-      throw new Error('User must be authenticated to save flow')
-    }
-
-    // Check if user already has a flow
-    const { data: existingFlows, error: fetchError } = await supabase
-      .from('flows')
-      .select('id')
-      .eq('user_id', userId)
-      .limit(1)
-
-    if (fetchError) throw fetchError
-
     const flowData = {
       user_id: userId,
       name: flowName,
@@ -31,57 +21,31 @@ export const saveFlow = async (userId, nodes, edges, flowName = 'My Flow') => {
       updated_at: new Date().toISOString(),
     }
 
-    let result
-    if (existingFlows && existingFlows.length > 0) {
-      // Update existing flow
-      result = await supabase
-        .from('flows')
-        .update(flowData)
-        .eq('id', existingFlows[0].id)
-        .select()
-    } else {
-      // Insert new flow
-      result = await supabase
-        .from('flows')
-        .insert([flowData])
-        .select()
-    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(flowData))
 
-    if (result.error) throw result.error
-
-    return { data: result.data, error: null }
+    return { data: flowData, error: null }
   } catch (error) {
-    console.error('Error saving flow:', error)
+    console.error('Error saving flow to localStorage:', error)
     return { data: null, error }
   }
 }
 
 /**
- * Load flow data from Supabase
+ * Load flow data from localStorage
  * @param {string} userId - The authenticated user ID
  * @returns {Promise<{data, error}>}
  */
 export const loadFlow = async (userId) => {
   try {
-    if (!userId) {
-      throw new Error('User must be authenticated to load flow')
-    }
-
-    const { data, error } = await supabase
-      .from('flows')
-      .select('*')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-
-    if (error) throw error
-
-    if (data && data.length > 0) {
+    const storedData = localStorage.getItem(STORAGE_KEY)
+    
+    if (storedData) {
+      const flowData = JSON.parse(storedData)
       return {
         data: {
-          nodes: data[0].nodes_json || [],
-          edges: data[0].edges_json || [],
-          name: data[0].name || 'My Flow',
+          nodes: flowData.nodes_json || [],
+          edges: flowData.edges_json || [],
+          name: flowData.name || 'My Flow',
         },
         error: null,
       }
@@ -90,7 +54,7 @@ export const loadFlow = async (userId) => {
     // No saved flow found
     return { data: null, error: null }
   } catch (error) {
-    console.error('Error loading flow:', error)
+    console.error('Error loading flow from localStorage:', error)
     return { data: null, error }
   }
 }

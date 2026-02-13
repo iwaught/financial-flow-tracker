@@ -1,38 +1,31 @@
-import { supabase } from './supabase'
+// Subscriptions using localStorage instead of Supabase
+
+const SUBSCRIPTION_STORAGE_KEY = 'financial-flow-subscription'
 
 /**
- * Get user's subscription
+ * Get user's subscription from localStorage
  * @param {string} userId - The user ID
  * @returns {Promise<{subscription, error}>}
  */
 export const getUserSubscription = async (userId) => {
   try {
-    if (!userId) {
-      return { subscription: null, error: new Error('User ID required') }
+    const stored = localStorage.getItem(SUBSCRIPTION_STORAGE_KEY)
+    const subscriptions = stored ? JSON.parse(stored) : {}
+    const userSubscription = subscriptions[userId]
+
+    if (userSubscription) {
+      return { subscription: userSubscription, error: null }
     }
 
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .select('*')
-      .eq('user_id', userId)
-      .single()
-
-    if (error) {
-      // If no subscription found, return free plan
-      if (error.code === 'PGRST116') {
-        return {
-          subscription: {
-            user_id: userId,
-            plan_code: 'free',
-            status: 'active',
-          },
-          error: null,
-        }
-      }
-      throw error
+    // Default to free plan
+    return {
+      subscription: {
+        user_id: userId,
+        plan_code: 'free',
+        status: 'active',
+      },
+      error: null,
     }
-
-    return { subscription: data, error: null }
   } catch (error) {
     console.error('Error getting subscription:', error)
     return { subscription: null, error }
@@ -40,31 +33,24 @@ export const getUserSubscription = async (userId) => {
 }
 
 /**
- * Create or update subscription
+ * Create or update subscription in localStorage
  * @param {string} userId - The user ID
  * @param {Object} subscriptionData - Subscription data
  * @returns {Promise<{data, error}>}
  */
 export const upsertSubscription = async (userId, subscriptionData) => {
   try {
-    if (!userId) {
-      throw new Error('User ID required')
+    const stored = localStorage.getItem(SUBSCRIPTION_STORAGE_KEY)
+    const subscriptions = stored ? JSON.parse(stored) : {}
+    
+    subscriptions[userId] = {
+      user_id: userId,
+      ...subscriptionData,
     }
+    
+    localStorage.setItem(SUBSCRIPTION_STORAGE_KEY, JSON.stringify(subscriptions))
 
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .upsert(
-        {
-          user_id: userId,
-          ...subscriptionData,
-        },
-        { onConflict: 'user_id' }
-      )
-      .select()
-
-    if (error) throw error
-
-    return { data, error: null }
+    return { data: subscriptions[userId], error: null }
   } catch (error) {
     console.error('Error upserting subscription:', error)
     return { data: null, error }

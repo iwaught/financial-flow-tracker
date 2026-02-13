@@ -1,4 +1,6 @@
-import { supabase } from './supabase'
+// Achievements using localStorage instead of Supabase
+
+const ACHIEVEMENTS_STORAGE_KEY = 'financial-flow-achievements'
 
 // Achievement definitions
 export const ACHIEVEMENTS = {
@@ -41,25 +43,18 @@ export const ACHIEVEMENTS = {
 }
 
 /**
- * Get all achievements for a user
+ * Get all achievements for a user from localStorage
  * @param {string} userId - The user ID
  * @returns {Promise<{unlockedAchievements: string[], error: any}>}
  */
 export const getUserAchievements = async (userId) => {
   try {
-    if (!userId) {
-      return { unlockedAchievements: [], error: null }
-    }
-
-    const { data, error } = await supabase
-      .from('user_achievements')
-      .select('achievement_id')
-      .eq('user_id', userId)
-
-    if (error) throw error
+    const stored = localStorage.getItem(ACHIEVEMENTS_STORAGE_KEY)
+    const achievements = stored ? JSON.parse(stored) : {}
+    const userAchievements = achievements[userId] || []
 
     return {
-      unlockedAchievements: data.map((a) => a.achievement_id),
+      unlockedAchievements: userAchievements,
       error: null,
     }
   } catch (error) {
@@ -69,46 +64,26 @@ export const getUserAchievements = async (userId) => {
 }
 
 /**
- * Unlock an achievement for a user
+ * Unlock an achievement for a user in localStorage
  * @param {string} userId - The user ID
  * @param {string} achievementId - The achievement ID
  * @returns {Promise<{success: boolean, alreadyUnlocked: boolean, error: any}>}
  */
 export const unlockAchievement = async (userId, achievementId) => {
   try {
-    if (!userId) {
-      throw new Error('User must be authenticated to unlock achievements')
-    }
+    const stored = localStorage.getItem(ACHIEVEMENTS_STORAGE_KEY)
+    const achievements = stored ? JSON.parse(stored) : {}
+    const userAchievements = achievements[userId] || []
 
     // Check if already unlocked
-    const { data: existing } = await supabase
-      .from('user_achievements')
-      .select('achievement_id')
-      .eq('user_id', userId)
-      .eq('achievement_id', achievementId)
-      .single()
-
-    if (existing) {
+    if (userAchievements.includes(achievementId)) {
       return { success: false, alreadyUnlocked: true, error: null }
     }
 
-    // Insert new achievement
-    const { error } = await supabase
-      .from('user_achievements')
-      .insert([
-        {
-          user_id: userId,
-          achievement_id: achievementId,
-        },
-      ])
-
-    if (error) {
-      // Check for unique constraint violation (race condition)
-      if (error.code === '23505') {
-        return { success: false, alreadyUnlocked: true, error: null }
-      }
-      throw error
-    }
+    // Add new achievement
+    userAchievements.push(achievementId)
+    achievements[userId] = userAchievements
+    localStorage.setItem(ACHIEVEMENTS_STORAGE_KEY, JSON.stringify(achievements))
 
     return { success: true, alreadyUnlocked: false, error: null }
   } catch (error) {
