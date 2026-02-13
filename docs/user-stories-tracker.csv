@@ -4,7 +4,7 @@ US-FFT-002,Freelance income node,Done,,,"Added 'Add Freelance Income' button, cr
 US-FFT-003,Rent expense node,Done,,,"Added 'Add Rent Expense' button, creates red expense node labeled 'Rent' with $0 default value, distinct red styling"
 US-FFT-004,Dynamic final edge color by net value,Done,,,"Implemented edge coloring logic: green for positive net value, red for negative, gray for zero; updates dynamically based on connections"
 US-FFT-005,Editable node values,Done,,,"Implemented editable value fields for all nodes, double-click to edit, currency formatting, input validation, values persist during session"
-US-FFT-006,Main status box calculation,Todo,,,
+US-FFT-006,Main status box calculation,Done,,,"Main status node displays total income, total expenses, and net value with color indicators; updates in real-time"
 US-FFT-007,Save and load flow state,Todo,,,
 US-FFT-008,Main box contribution breakdown panel,Todo,,,
 US-FFT-009,Delete nodes and connections,Todo,,,

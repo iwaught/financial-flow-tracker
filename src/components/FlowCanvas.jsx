@@ -49,10 +49,21 @@ const EditableNode = ({ data, id }) => {
 
   const renderLabel = () => {
     if (data.nodeType === 'status') {
-      return data.customLabel || (
+      const totalIncome = data.totalIncome || 0
+      const totalExpenses = data.totalExpenses || 0
+      const netValue = totalIncome - totalExpenses
+      const netColorClass = netValue > 0 ? 'text-green-700' : netValue < 0 ? 'text-red-700' : 'text-gray-700'
+      
+      return (
         <div className="text-center">
           <div className="font-bold text-lg">Financial Status</div>
-          <div className="text-sm text-gray-600">Central Hub</div>
+          <div className="text-xs text-gray-600 mt-1">
+            <div>Income: {formatCurrency(totalIncome)}</div>
+            <div>Expenses: {formatCurrency(totalExpenses)}</div>
+            <div className={`font-bold ${netColorClass} mt-1`}>
+              Net: {formatCurrency(netValue)}
+            </div>
+          </div>
         </div>
       )
     }
@@ -223,6 +234,21 @@ const FlowCanvas = () => {
 
     const netValue = totalIncome - totalExpenses
 
+    // Update main status node with calculated values
+    setNodes((nds) => nds.map(node => {
+      if (node.id === '1') {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            totalIncome,
+            totalExpenses,
+          },
+        }
+      }
+      return node
+    }))
+
     // Update edge colors based on net value
     setEdges((eds) => eds.map(edge => {
       // Color edges from main status to expenses based on net value
@@ -247,7 +273,7 @@ const FlowCanvas = () => {
       }
       return edge
     }))
-  }, [nodes, edges, setEdges])
+  }, [nodes, edges, setEdges, setNodes])
 
   const onConnect = useCallback(
     (params) => setEdges((eds) => addEdge(params, eds)),
