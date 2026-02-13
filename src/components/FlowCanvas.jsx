@@ -208,7 +208,7 @@ const initialNodes = [
     data: { 
       label: 'Work Income',
       nodeType: 'income',
-      value: 3500,
+      value: 2950,
     },
     position: { x: 100, y: 100 },
     style: {
@@ -225,7 +225,7 @@ const initialNodes = [
     data: { 
       label: 'Living Costs',
       nodeType: 'expense',
-      value: 2200,
+      value: 2250,
     },
     position: { x: 700, y: 100 },
     style: {
@@ -236,12 +236,48 @@ const initialNodes = [
       width: 150,
     },
   },
+  {
+    id: '4',
+    type: 'editable',
+    data: { 
+      label: 'Freelance Work',
+      nodeType: 'income',
+      value: 1500,
+    },
+    position: { x: 400, y: 100 },
+    style: {
+      background: '#D1FAE5',
+      border: '2px solid #10B981',
+      borderRadius: '8px',
+      padding: '12px',
+      width: 150,
+    },
+  },
 ]
 
-const initialEdges = []
+const initialEdges = [
+  {
+    id: 'e2-4',
+    source: '2',
+    target: '4',
+    type: 'default',
+  },
+  {
+    id: 'e4-3',
+    source: '4',
+    target: '3',
+    type: 'default',
+  },
+  {
+    id: 'e3-1',
+    source: '3',
+    target: '1',
+    type: 'default',
+  },
+]
 
 const FlowCanvas = () => {
-  const nodeIdRef = useRef(4)
+  const nodeIdRef = useRef(5)
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
 
@@ -306,41 +342,127 @@ const FlowCanvas = () => {
     )
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Calculate net value and update edge colors
+  // Calculate flow amounts through the network and update edge styles
   useEffect(() => {
     const mainStatusNode = nodes.find(n => n.id === '1')
     if (!mainStatusNode) return
 
-    // Calculate total income from nodes connected TO the main status
-    let totalIncome = 0
-    const incomeBreakdown = []
+    // Build adjacency map for flow computation
+    const nodeMap = new Map()
+    nodes.forEach(node => nodeMap.set(node.id, node))
+
+    // Calculate flow for each edge by traversing from source nodes
+    const edgeFlows = new Map()
+    const nodeFlows = new Map() // Track computed flow at each node
+
+    // Helper function to compute flow at a node (recursive with memoization)
+    const computeNodeFlow = (nodeId, visited = new Set()) => {
+      // Prevent cycles
+      if (visited.has(nodeId)) return 0
+      if (nodeFlows.has(nodeId)) return nodeFlows.get(nodeId)
+      
+      visited.add(nodeId)
+      const node = nodeMap.get(nodeId)
+      if (!node) return 0
+
+      let flow = 0
+
+      // For income nodes, flow is their value PLUS any incoming flows
+      if (node.data.nodeType === 'income') {
+        flow = node.data.value || 0
+        // Add incoming flows from other income nodes (chained incomes)
+        edges.forEach(edge => {
+          if (edge.target === nodeId) {
+            const sourceFlow = computeNodeFlow(edge.source, new Set(visited))
+            flow += sourceFlow
+            edgeFlows.set(edge.id, sourceFlow)
+          }
+        })
+      }
+      // For expense nodes, flow is sum of incoming flows minus their value
+      else if (node.data.nodeType === 'expense') {
+        let incomingFlow = 0
+        edges.forEach(edge => {
+          if (edge.target === nodeId) {
+            const sourceFlow = computeNodeFlow(edge.source, new Set(visited))
+            incomingFlow += sourceFlow
+            edgeFlows.set(edge.id, sourceFlow)
+          }
+        })
+        flow = Math.max(0, incomingFlow - (node.data.value || 0))
+      }
+      // For status node, sum all incoming flows
+      else if (node.data.nodeType === 'status') {
+        edges.forEach(edge => {
+          if (edge.target === nodeId) {
+            const sourceFlow = computeNodeFlow(edge.source, new Set(visited))
+            flow += sourceFlow
+            edgeFlows.set(edge.id, sourceFlow)
+          }
+        })
+      }
+
+      nodeFlows.set(nodeId, flow)
+      return flow
+    }
+
+    // Compute flows for all nodes connected to status
     edges.forEach(edge => {
-      if (edge.target === '1') {
-        const sourceNode = nodes.find(n => n.id === edge.source)
-        if (sourceNode?.data?.nodeType === 'income') {
-          const value = sourceNode.data.value || 0
-          totalIncome += value
-          incomeBreakdown.push({
-            label: sourceNode.data.label || 'Income',
-            value: value,
-          })
-        }
+      if (!edgeFlows.has(edge.id)) {
+        const sourceFlow = computeNodeFlow(edge.source)
+        edgeFlows.set(edge.id, sourceFlow)
       }
     })
 
-    // Calculate total expenses from nodes connected FROM the main status
+    // Calculate total income and expenses for status node based on flows
+    let totalIncome = 0
     let totalExpenses = 0
+    const incomeBreakdown = []
     const expenseBreakdown = []
+
+    // Pre-compute set of connected node IDs for performance
+    const connectedNodeIds = new Set()
     edges.forEach(edge => {
-      if (edge.source === '1') {
-        const targetNode = nodes.find(n => n.id === edge.target)
-        if (targetNode?.data?.nodeType === 'expense') {
-          const value = targetNode.data.value || 0
-          totalExpenses += value
-          expenseBreakdown.push({
-            label: targetNode.data.label || 'Expense',
-            value: value,
-          })
+      connectedNodeIds.add(edge.source)
+      connectedNodeIds.add(edge.target)
+    })
+
+    // Calculate all original income sources (ONLY if connected)
+    nodes.forEach(node => {
+      if (node.data.nodeType === 'income' && connectedNodeIds.has(node.id)) {
+        totalIncome += node.data.value || 0
+      }
+    })
+
+    // Calculate all expenses that were deducted along the flow paths (ONLY if connected)
+    nodes.forEach(node => {
+      if (node.data.nodeType === 'expense' && connectedNodeIds.has(node.id)) {
+        totalExpenses += node.data.value || 0
+        expenseBreakdown.push({
+          label: node.data.label || 'Expense',
+          value: node.data.value || 0,
+        })
+      }
+    })
+
+    // Get breakdown from nodes directly connected to status (what flows into status)
+    edges.forEach(edge => {
+      if (edge.target === '1') {
+        const sourceNode = nodeMap.get(edge.source)
+        if (sourceNode) {
+          const flowAmount = edgeFlows.get(edge.id) || 0
+          if (sourceNode.data.nodeType === 'income') {
+            incomeBreakdown.push({
+              label: sourceNode.data.label || 'Income',
+              value: flowAmount,
+            })
+          } else if (sourceNode.data.nodeType === 'expense') {
+            // Flow coming from expense is net after deduction
+            incomeBreakdown.push({
+              label: `${sourceNode.data.label || 'Expense'} (net)`,
+              value: flowAmount,
+            })
+          }
         }
       }
     })
@@ -364,29 +486,55 @@ const FlowCanvas = () => {
       return node
     }))
 
-    // Update edge colors based on net value
+    // Update edge styles based on flow amounts
     setEdges((eds) => eds.map(edge => {
-      // Color edges from main status to expenses based on net value
-      if (edge.source === '1') {
-        const targetNode = nodes.find(n => n.id === edge.target)
-        if (targetNode?.data?.nodeType === 'expense') {
-          if (netValue > 0) {
-            return { ...edge, style: { stroke: '#10B981', strokeWidth: 2 } }
-          } else if (netValue < 0) {
-            return { ...edge, style: { stroke: '#EF4444', strokeWidth: 2 } }
-          } else {
-            return { ...edge, style: { stroke: '#6B7280', strokeWidth: 2 } }
-          }
+      const flowAmount = edgeFlows.get(edge.id) || 0
+      
+      // Calculate stroke width based on flow (min 2, max 6 for better visibility)
+      const maxFlow = Math.max(...Array.from(edgeFlows.values()), 1)
+      const minWidth = 2
+      const maxWidth = 6
+      const strokeWidth = Math.max(minWidth, Math.min(maxWidth, (flowAmount / maxFlow) * maxWidth))
+      
+      // Determine color based on flow amount - use vibrant colors to showcase money flow
+      let strokeColor
+      let markerEnd
+      
+      if (flowAmount > 0) {
+        // Use a beautiful gradient-like effect with green shades
+        // Higher flow = brighter, more vibrant green
+        const intensity = maxFlow > 0 ? (flowAmount / maxFlow) : 0.5
+        
+        // Beautiful vibrant green for money flow (#10B981 to #34D399)
+        const r = Math.round(16 + (52 - 16) * intensity)
+        const g = Math.round(185 + (211 - 185) * intensity)
+        const b = Math.round(129 + (153 - 129) * intensity)
+        strokeColor = `rgb(${r}, ${g}, ${b})`
+        
+        // Add arrow marker for flow direction (smaller size for better aesthetics)
+        markerEnd = {
+          type: 'arrowclosed',
+          color: strokeColor,
+          width: 12,
+          height: 12,
         }
+      } else {
+        // Gray for zero flow
+        strokeColor = '#D1D5DB'
+        markerEnd = undefined
       }
-      // Income edges stay green
-      if (edge.target === '1') {
-        const sourceNode = nodes.find(n => n.id === edge.source)
-        if (sourceNode?.data?.nodeType === 'income') {
-          return { ...edge, style: { stroke: '#10B981', strokeWidth: 2 } }
-        }
+      
+      return { 
+        ...edge, 
+        style: { 
+          stroke: strokeColor, 
+          strokeWidth: strokeWidth,
+          strokeLinecap: 'round',
+        },
+        animated: flowAmount > 0, // Animate edges with positive flow
+        markerEnd: markerEnd,
+        type: 'smoothstep', // Use smooth curved edges for better visual flow
       }
-      return edge
     }))
   }, [nodes, edges]) // Removed setEdges and setNodes as they are stable functions
 
