@@ -7,5 +7,5 @@ US-FFT-005,Editable node values,Done,,,"Implemented editable value fields for al
 US-FFT-006,Main status box calculation,Done,,,"Main status node displays total income, total expenses, and net value with color indicators; updates in real-time"
 US-FFT-007,Save and load flow state,Done,,,"Implemented Save and Load buttons using localStorage, preserves all nodes, edges, positions, and values with success messages"
 US-FFT-008,Main box contribution breakdown panel,Done,,,"Click main status node to show detailed breakdown of income/expense sources with percentages, updates dynamically"
-US-FFT-009,Delete nodes and connections,Todo,,,
+US-FFT-009,Delete nodes and connections,Done,,,"Nodes can be deleted with delete key, connections auto-removed, main status node protected from deletion, calculations update immediately"
 US-FFT-010,Custom node labels,Todo,,,

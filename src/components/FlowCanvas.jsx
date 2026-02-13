@@ -330,6 +330,21 @@ const FlowCanvas = () => {
     [setEdges]
   )
 
+  const onNodesDelete = useCallback(
+    (nodesToDelete) => {
+      // Prevent deletion of the main status node
+      const filteredNodes = nodesToDelete.filter(node => node.id !== '1')
+      if (filteredNodes.length === 0) {
+        if (nodesToDelete.some(node => node.id === '1')) {
+          alert('Cannot delete the main status node')
+        }
+        return
+      }
+      // Edges will be automatically deleted by ReactFlow
+    },
+    []
+  )
+
   const addIncomeNode = () => {
     const newNode = {
       id: `${nodeIdRef.current++}`,
@@ -561,6 +576,7 @@ const FlowCanvas = () => {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onNodesDelete={onNodesDelete}
         nodeTypes={nodeTypes}
         fitView
         attributionPosition="bottom-right"
