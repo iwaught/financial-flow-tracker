@@ -17,6 +17,14 @@ import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 // Configure PDF.js worker with local file
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 
+// FX rate configuration constants
+const FX_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+const AMOUNT_DECIMALS = 2
+const RATE_DECIMALS = 4
+
+// Helper function for date formatting
+const getCurrentDate = () => new Date().toISOString().split('T')[0]
+
 // Custom node component with editable value
 const EditableNode = ({ data, id }) => {
   const [isEditingValue, setIsEditingValue] = useState(false)
@@ -972,7 +980,7 @@ const FlowCanvas = () => {
   // Helper function to get FX rate with multi-provider fallback and caching
   const getFxRate = async (fromCurrency, toCurrency = 'USD') => {
     if (fromCurrency === toCurrency) {
-      return { rate: 1, date: new Date().toISOString().split('T')[0], provider: 'none' }
+      return { rate: 1, date: getCurrentDate(), provider: 'none' }
     }
 
     // Check cache first (24-hour TTL)
@@ -982,9 +990,8 @@ const FlowCanvas = () => {
       try {
         const { rate, date, timestamp, provider } = JSON.parse(cached)
         const age = Date.now() - timestamp
-        const TTL = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
         
-        if (age < TTL) {
+        if (age < FX_CACHE_TTL_MS) {
           console.log(`FX cache hit: ${fromCurrency} → ${toCurrency} = ${rate} (${provider}, cached ${Math.round(age / 3600000)}h ago)`)
           return { rate, date, provider: `${provider} (cached)` }
         }
@@ -1007,7 +1014,7 @@ const FlowCanvas = () => {
           if (data.result !== 'success') throw new Error('API returned error')
           return {
             rate: data.rates[toCurrency],
-            date: data.time_last_update_utc ? new Date(data.time_last_update_utc).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+            date: data.time_last_update_utc ? new Date(data.time_last_update_utc).toISOString().split('T')[0] : getCurrentDate()
           }
         }
       },
@@ -1037,7 +1044,7 @@ const FlowCanvas = () => {
           const data = await response.json()
           return {
             rate: data.rates[toCurrency],
-            date: data.date || new Date().toISOString().split('T')[0]
+            date: data.date || getCurrentDate()
           }
         }
       }
@@ -1247,13 +1254,13 @@ const FlowCanvas = () => {
 
         // Show success message with conversion details
         const conversionDetails = conversions.map(c => 
-          `${c.original.toFixed(2)} ${c.currency} × ${c.rate.toFixed(4)} = $${c.usd.toFixed(2)} USD`
+          `${c.original.toFixed(AMOUNT_DECIMALS)} ${c.currency} × ${c.rate.toFixed(RATE_DECIMALS)} = $${c.usd.toFixed(AMOUNT_DECIMALS)} USD`
         ).join('\n')
         
         const successMsg = `Import successful!\n` +
           `Extracted ${payments.length} payment(s)\n` +
           conversionDetails + '\n' +
-          `Total: $${totalUsd.toFixed(2)} USD` +
+          `Total: $${totalUsd.toFixed(AMOUNT_DECIMALS)} USD` +
           (fxDate ? `\nFX Date: ${fxDate}` : '') +
           (fxProvider ? `\nFX Provider: ${fxProvider}` : '')
         
