@@ -206,6 +206,35 @@ const FlowCanvas = () => {
     setNodes((nds) => nds.concat(newNode))
   }
 
+  const addRentExpenseNode = () => {
+    const newNode = {
+      id: `${nodeIdRef.current++}`,
+      type: 'default',
+      data: {
+        label: (
+          <div className="text-center">
+            <div className="font-semibold">Rent</div>
+            <div className="text-sm font-bold text-red-700">$0</div>
+            <div className="text-xs text-gray-500">USD</div>
+          </div>
+        ),
+        nodeType: 'expense',
+      },
+      position: {
+        x: Math.random() * 300 + 600,
+        y: Math.random() * 300 + 50,
+      },
+      style: {
+        background: '#FEE2E2',
+        border: '2px solid #EF4444',
+        borderRadius: '8px',
+        padding: '12px',
+        width: 150,
+      },
+    }
+    setNodes((nds) => nds.concat(newNode))
+  }
+
   return (
     <div className="w-full h-full relative">
       <div className="absolute top-4 left-4 z-10 flex gap-3">
@@ -226,6 +255,12 @@ const FlowCanvas = () => {
           className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
         >
           + Add Income
+        </button>
+        <button
+          onClick={addRentExpenseNode}
+          className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
+        >
+          + Add Rent Expense
         </button>
         <button
           onClick={addExpenseNode}
