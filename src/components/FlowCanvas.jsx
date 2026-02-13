@@ -14,13 +14,22 @@ import 'reactflow/dist/style.css'
 
 // Custom node component with editable value
 const EditableNode = ({ data, id }) => {
-  const [isEditing, setIsEditing] = useState(false)
+  const [isEditingValue, setIsEditingValue] = useState(false)
+  const [isEditingLabel, setIsEditingLabel] = useState(false)
   const [editValue, setEditValue] = useState(data.value || 0)
+  const [editLabel, setEditLabel] = useState(data.label || '')
   const [showBreakdown, setShowBreakdown] = useState(false)
 
-  const handleDoubleClick = () => {
+  const handleDoubleClickValue = () => {
     if (data.nodeType !== 'status') {
-      setIsEditing(true)
+      setIsEditingValue(true)
+    }
+  }
+
+  const handleDoubleClickLabel = (e) => {
+    e.stopPropagation()
+    if (data.nodeType !== 'status') {
+      setIsEditingLabel(true)
     }
   }
 
@@ -30,17 +39,30 @@ const EditableNode = ({ data, id }) => {
     }
   }
 
-  const handleBlur = () => {
-    setIsEditing(false)
+  const handleValueBlur = () => {
+    setIsEditingValue(false)
     const numValue = parseFloat(editValue) || 0
     if (data.onValueChange) {
       data.onValueChange(id, numValue)
     }
   }
 
-  const handleKeyDown = (e) => {
+  const handleLabelBlur = () => {
+    setIsEditingLabel(false)
+    if (data.onLabelChange && editLabel.trim()) {
+      data.onLabelChange(id, editLabel.trim())
+    }
+  }
+
+  const handleValueKeyDown = (e) => {
     if (e.key === 'Enter') {
-      handleBlur()
+      handleValueBlur()
+    }
+  }
+
+  const handleLabelKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleLabelBlur()
     }
   }
 
@@ -108,20 +130,40 @@ const EditableNode = ({ data, id }) => {
     const colorClass = data.nodeType === 'income' ? 'text-green-700' : 'text-red-700'
 
     return (
-      <div className="text-center" onDoubleClick={handleDoubleClick}>
-        <div className="font-semibold">{data.label || 'Node'}</div>
-        {isEditing ? (
+      <div className="text-center">
+        {isEditingLabel ? (
+          <input
+            type="text"
+            value={editLabel}
+            onChange={(e) => setEditLabel(e.target.value)}
+            onBlur={handleLabelBlur}
+            onKeyDown={handleLabelKeyDown}
+            className="text-sm font-semibold w-32 text-center border border-gray-300 rounded px-1"
+            autoFocus
+          />
+        ) : (
+          <div 
+            className="font-semibold cursor-pointer hover:underline" 
+            onDoubleClick={handleDoubleClickLabel}
+          >
+            {data.label || 'Node'}
+          </div>
+        )}
+        {isEditingValue ? (
           <input
             type="number"
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
-            onBlur={handleBlur}
-            onKeyDown={handleKeyDown}
+            onBlur={handleValueBlur}
+            onKeyDown={handleValueKeyDown}
             className="text-sm font-bold w-20 text-center border border-gray-300 rounded px-1"
             autoFocus
           />
         ) : (
-          <div className={`text-sm font-bold ${colorClass} cursor-pointer hover:underline`}>
+          <div 
+            className={`text-sm font-bold ${colorClass} cursor-pointer hover:underline`}
+            onDoubleClick={handleDoubleClickValue}
+          >
             {formatCurrency(data.value || 0)}
           </div>
         )}
@@ -214,6 +256,7 @@ const FlowCanvas = () => {
               ...node.data,
               value: newValue,
               onValueChange: handleValueChange,
+              onLabelChange: handleLabelChange,
             },
           }
         }
@@ -222,13 +265,34 @@ const FlowCanvas = () => {
           data: {
             ...node.data,
             onValueChange: handleValueChange,
+            onLabelChange: handleLabelChange,
           },
         }
       })
     )
   }, [setNodes])
 
-  // Add onValueChange to all nodes on mount
+  // Handle label changes for nodes
+  const handleLabelChange = useCallback((nodeId, newLabel) => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === nodeId) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              label: newLabel,
+              onValueChange: handleValueChange,
+              onLabelChange: handleLabelChange,
+            },
+          }
+        }
+        return node
+      })
+    )
+  }, [setNodes, handleValueChange])
+
+  // Add onValueChange and onLabelChange to all nodes on mount
   useEffect(() => {
     setNodes((nds) =>
       nds.map((node) => ({
@@ -236,6 +300,7 @@ const FlowCanvas = () => {
         data: {
           ...node.data,
           onValueChange: handleValueChange,
+          onLabelChange: handleLabelChange,
         },
       }))
     )
@@ -354,6 +419,7 @@ const FlowCanvas = () => {
         nodeType: 'income',
         value: 0,
         onValueChange: handleValueChange,
+        onLabelChange: handleLabelChange,
       },
       position: {
         x: Math.random() * 300 + 50,
@@ -379,6 +445,7 @@ const FlowCanvas = () => {
         nodeType: 'income',
         value: 0,
         onValueChange: handleValueChange,
+        onLabelChange: handleLabelChange,
       },
       position: {
         x: Math.random() * 300 + 50,
@@ -404,6 +471,7 @@ const FlowCanvas = () => {
         nodeType: 'income',
         value: 0,
         onValueChange: handleValueChange,
+        onLabelChange: handleLabelChange,
       },
       position: {
         x: Math.random() * 300 + 50,
@@ -429,6 +497,7 @@ const FlowCanvas = () => {
         nodeType: 'expense',
         value: 0,
         onValueChange: handleValueChange,
+        onLabelChange: handleLabelChange,
       },
       position: {
         x: Math.random() * 300 + 600,
@@ -454,6 +523,7 @@ const FlowCanvas = () => {
         nodeType: 'expense',
         value: 0,
         onValueChange: handleValueChange,
+        onLabelChange: handleLabelChange,
       },
       position: {
         x: Math.random() * 300 + 600,
@@ -479,6 +549,7 @@ const FlowCanvas = () => {
             ...node.data,
             // Remove function references before saving
             onValueChange: undefined,
+            onLabelChange: undefined,
             customLabel: undefined,
           }
         })),
@@ -502,12 +573,13 @@ const FlowCanvas = () => {
       
       const flowState = JSON.parse(saved)
       
-      // Restore nodes with onValueChange function
+      // Restore nodes with onValueChange and onLabelChange functions
       const restoredNodes = flowState.nodes.map(node => ({
         ...node,
         data: {
           ...node.data,
           onValueChange: handleValueChange,
+          onLabelChange: handleLabelChange,
         }
       }))
       
