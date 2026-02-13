@@ -14,7 +14,7 @@ import 'reactflow/dist/style.css'
 import * as pdfjsLib from 'pdfjs-dist'
 
 // Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
 
 // Custom node component with editable value
 const EditableNode = ({ data, id }) => {
@@ -761,7 +761,8 @@ const FlowCanvas = () => {
       { pattern: /\$|USD/i, code: 'USD' },
       { pattern: /€|EUR/i, code: 'EUR' },
       { pattern: /£|GBP/i, code: 'GBP' },
-      { pattern: /¥|JPY|CNY/i, code: 'JPY' },
+      { pattern: /¥|JPY/i, code: 'JPY' },
+      { pattern: /CNY/i, code: 'CNY' },
       { pattern: /CAD/i, code: 'CAD' },
       { pattern: /AUD/i, code: 'AUD' },
       { pattern: /CHF/i, code: 'CHF' },
@@ -993,24 +994,25 @@ const FlowCanvas = () => {
               width: 150,
             },
           }
+          
+          // Store the new node ID for edge creation
+          const newNodeId = newNode.id
           setNodes((nds) => nds.concat(newNode))
           ccNode = newNode
 
-          // Create edge from node to main status node if it doesn't exist
-          setTimeout(() => {
-            setEdges((eds) => {
-              const edgeExists = eds.some(e => e.source === ccNode.id && e.target === '1')
-              if (!edgeExists) {
-                return eds.concat({
-                  id: `e${ccNode.id}-1`,
-                  source: ccNode.id,
-                  target: '1',
-                  type: 'default',
-                })
-              }
-              return eds
-            })
-          }, 100)
+          // Create edge from node to main status node
+          setEdges((eds) => {
+            const edgeExists = eds.some(e => e.source === newNodeId && e.target === '1')
+            if (!edgeExists) {
+              return eds.concat({
+                id: `e${newNodeId}-1`,
+                source: newNodeId,
+                target: '1',
+                type: 'default',
+              })
+            }
+            return eds
+          })
         }
 
         // Show success message
