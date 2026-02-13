@@ -12,9 +12,10 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import * as pdfjsLib from 'pdfjs-dist'
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+// Configure PDF.js worker with local file
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 
 // Custom node component with editable value
 const EditableNode = ({ data, id }) => {
@@ -290,6 +291,7 @@ const FlowCanvas = () => {
   const [pdfPassword, setPdfPassword] = useState('')
   const [isImporting, setIsImporting] = useState(false)
   const [importMessage, setImportMessage] = useState('')
+  const [showPdfImport, setShowPdfImport] = useState(false)
   const fileInputRef = useRef(null)
 
   // Handle value changes for nodes
@@ -799,8 +801,9 @@ const FlowCanvas = () => {
   const extractPaymentAmounts = (text) => {
     const payments = []
     
-    // Keywords that typically indicate payment amounts
+    // Keywords that typically indicate payment amounts (English and Spanish)
     const keywords = [
+      // English
       'payment due',
       'total payment',
       'amount due',
@@ -810,6 +813,17 @@ const FlowCanvas = () => {
       'total balance',
       'payment amount',
       'amount owed',
+      'current balance',
+      'statement balance',
+      // Spanish
+      'pago total',
+      'pago mínimo',
+      'saldo total',
+      'saldo actual',
+      'monto a pagar',
+      'total a pagar',
+      'importe total',
+      'cuota',
     ]
 
     // Split text into lines for better processing
@@ -899,10 +913,27 @@ const FlowCanvas = () => {
     }
   }
 
+  // Helper to close and reset PDF import panel
+  const closePdfImport = () => {
+    setShowPdfImport(false)
+    setPdfFile(null)
+    setPdfPassword('')
+    setImportMessage('')
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
   // Main PDF import handler
   const handlePdfImport = async () => {
     if (!pdfFile) {
       setImportMessage('Please select a PDF file')
+      return
+    }
+
+    // Validate file type
+    if (!pdfFile.name.toLowerCase().endsWith('.pdf') || pdfFile.type !== 'application/pdf') {
+      setImportMessage('Error: Please select a valid PDF file')
       return
     }
 
@@ -1054,6 +1085,12 @@ const FlowCanvas = () => {
       } catch (pdfError) {
         if (pdfError.name === 'PasswordException') {
           setImportMessage('Wrong password. Please try again.')
+          setIsImporting(false)
+          return
+        } else if (pdfError.name === 'InvalidPDFException') {
+          setImportMessage('Invalid or corrupted PDF file. Please select a valid PDF.')
+          setIsImporting(false)
+          return
         } else {
           throw pdfError
         }
@@ -1112,11 +1149,27 @@ const FlowCanvas = () => {
         >
           📂 Load
         </button>
+        <button
+          onClick={() => setShowPdfImport(!showPdfImport)}
+          className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
+        >
+          📄 Import PDF
+        </button>
       </div>
 
       {/* PDF Import Section */}
-      <div className="absolute top-4 right-4 z-10 bg-white p-4 rounded-lg shadow-lg" style={{ maxWidth: '350px' }}>
-        <h3 className="text-sm font-bold mb-2">Import Credit Card PDF</h3>
+      {showPdfImport && (
+        <div className="absolute top-4 right-4 z-10 bg-white p-4 rounded-lg shadow-lg" style={{ maxWidth: '350px' }}>
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-sm font-bold">Import Credit Card PDF</h3>
+            <button
+              onClick={closePdfImport}
+              className="text-gray-500 hover:text-gray-700 font-bold text-lg leading-none"
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
         <div className="flex flex-col gap-2">
           <input
             ref={fileInputRef}
@@ -1156,6 +1209,7 @@ const FlowCanvas = () => {
           )}
         </div>
       </div>
+      )}
       
       <ReactFlow
         nodes={nodes}
