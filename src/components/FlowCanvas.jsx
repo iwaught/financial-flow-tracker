@@ -18,6 +18,9 @@ import { saveFlow, loadFlow } from '../lib/flowPersistence'
 import { ACHIEVEMENTS, getUserAchievements, checkAchievements } from '../lib/achievements'
 import AchievementToast from './AchievementToast'
 import AchievementsPanel from './AchievementsPanel'
+import { BILLING_ENABLED, PLANS, hasReachedPlanLimit } from '../lib/stripe'
+import { getUserSubscription } from '../lib/subscription'
+import UpgradeModal from './UpgradeModal'
 
 // Configure PDF.js worker with local file
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
@@ -310,6 +313,10 @@ const FlowCanvas = () => {
   const [currentToast, setCurrentToast] = useState(null)
   const [showAchievementsPanel, setShowAchievementsPanel] = useState(false)
 
+  // Billing state
+  const [subscription, setSubscription] = useState(null)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+
   // Handle value changes for nodes
   const handleValueChange = useCallback((nodeId, newValue) => {
     setNodes((nds) =>
@@ -395,6 +402,17 @@ const FlowCanvas = () => {
       checkForAchievements()
     }
   }, [nodes.length, edges.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load user subscription
+  useEffect(() => {
+    const loadSubscription = async () => {
+      if (user?.id) {
+        const { subscription } = await getUserSubscription(user.id)
+        setSubscription(subscription)
+      }
+    }
+    loadSubscription()
+  }, [user?.id])
 
   // Calculate flow amounts through the network and update edge styles
   useEffect(() => {
@@ -630,7 +648,21 @@ const FlowCanvas = () => {
     []
   )
 
+  // Check if user can add more boxes based on plan
+  const canAddBox = () => {
+    if (!BILLING_ENABLED) return true // Billing disabled, no limits
+    
+    const planCode = subscription?.plan_code || 'free'
+    if (hasReachedPlanLimit(nodes, planCode)) {
+      setShowUpgradeModal(true)
+      return false
+    }
+    return true
+  }
+
   const addIncomeNode = () => {
+    if (!canAddBox()) return
+
     const newNode = {
       id: `${nodeIdRef.current++}`,
       type: 'editable',
@@ -657,6 +689,8 @@ const FlowCanvas = () => {
   }
 
   const addAirbnbIncomeNode = () => {
+    if (!canAddBox()) return
+
     const newNode = {
       id: `${nodeIdRef.current++}`,
       type: 'editable',
@@ -683,6 +717,8 @@ const FlowCanvas = () => {
   }
 
   const addFreelanceIncomeNode = () => {
+    if (!canAddBox()) return
+
     const newNode = {
       id: `${nodeIdRef.current++}`,
       type: 'editable',
@@ -709,6 +745,8 @@ const FlowCanvas = () => {
   }
 
   const addExpenseNode = () => {
+    if (!canAddBox()) return
+
     const newNode = {
       id: `${nodeIdRef.current++}`,
       type: 'editable',
@@ -735,6 +773,8 @@ const FlowCanvas = () => {
   }
 
   const addRentExpenseNode = () => {
+    if (!canAddBox()) return
+
     const newNode = {
       id: `${nodeIdRef.current++}`,
       type: 'editable',
@@ -1296,6 +1336,28 @@ const FlowCanvas = () => {
         <div className="bg-white px-3 py-2 rounded-lg shadow-lg text-sm">
           <span className="text-gray-600">👤 {user?.email}</span>
         </div>
+        
+        {/* Plan badge - only show if billing is enabled */}
+        {BILLING_ENABLED && subscription && (
+          <div className={`px-3 py-2 rounded-lg shadow-lg text-sm font-semibold ${
+            subscription.plan_code === 'pro' 
+              ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white' 
+              : 'bg-gray-200 text-gray-700'
+          }`}>
+            {subscription.plan_code === 'pro' ? '⭐ Pro' : '🆓 Free'}
+          </div>
+        )}
+
+        {/* Upgrade button - only show for free users if billing enabled */}
+        {BILLING_ENABLED && subscription?.plan_code === 'free' && (
+          <button
+            onClick={() => setShowUpgradeModal(true)}
+            className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold rounded-lg shadow-lg transition-all"
+          >
+            ⭐ Upgrade
+          </button>
+        )}
+
         <button
           onClick={handleSignOut}
           className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg shadow-lg transition-colors duration-200"
@@ -1477,6 +1539,15 @@ const FlowCanvas = () => {
         nodes={nodes}
         edges={edges}
       />
+
+      {/* Upgrade Modal - only if billing enabled */}
+      {BILLING_ENABLED && (
+        <UpgradeModal
+          isOpen={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          currentPlan={subscription?.plan_code || 'free'}
+        />
+      )}
     </div>
   )
 }
