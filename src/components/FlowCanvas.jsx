@@ -388,7 +388,7 @@ const FlowCanvas = () => {
       }
       return edge
     }))
-  }, [nodes, edges, setEdges, setNodes])
+  }, [nodes, edges]) // Removed setEdges and setNodes as they are stable functions
 
   const onConnect = useCallback(
     (params) => setEdges((eds) => addEdge(params, eds)),
