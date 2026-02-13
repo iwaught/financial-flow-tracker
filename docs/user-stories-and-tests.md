@@ -275,6 +275,43 @@ This document contains all user stories for the Financial Flow Tracker project, 
 
 ---
 
+## Story US-FFT-013: Import Password-Protected Credit Card Statement PDF to Auto-Create Expense Node
+
+**As a** user tracking high monthly credit card costs  
+**I want** to upload my password-protected statement PDF and have the app extract payment amounts from both cards, detect currency, convert to USD using the daily spot rate, and auto-create/update a red credit card expense box  
+**So that** I can quickly keep my financial flow accurate without manually retyping statement totals
+
+### Acceptance Criteria
+1. User can select PDF and enter password
+2. Password-protected PDF can be parsed
+3. Payment amounts are extracted for up to 2 cards
+4. Currency detected per amount
+5. Non-USD converted using daily spot to USD
+6. `Credit Card Expense` node created if not present
+7. Existing imported node updated (no duplicates)
+8. Node connected to main status node
+9. Success/error feedback visible and understandable
+
+### Test Case TC-FFT-013
+- **Setup**: Start app with `npm run dev`
+- **Action**: Import a password-protected PDF with 2 payment values (at least one non-USD)
+- **Expected**: 
+  - Import succeeds
+  - USD total equals sum of converted values
+  - Red `Credit Card Expense` node appears/updates
+  - Node is connected to main status node
+- **Action**: Re-import with changed statement values
+- **Expected**: Same node updates, no duplicate
+- **Action**: Try wrong password
+- **Expected**: 
+  - Error shown
+  - No graph changes applied
+
+### Branch Name
+`feature/US-FFT-013-credit-card-pdf-import`
+
+---
+
 ## Branch-to-Story Mapping Summary
 
 | Story ID | Branch Name | Short Description |
@@ -289,6 +326,7 @@ This document contains all user stories for the Financial Flow Tracker project, 
 | US-FFT-008 | feature/US-FFT-008-contribution-breakdown-panel | Main box contribution breakdown panel |
 | US-FFT-009 | feature/US-FFT-009-delete-nodes-connections | Delete nodes and connections |
 | US-FFT-010 | feature/US-FFT-010-custom-node-labels | Custom node labels |
+| US-FFT-013 | feature/US-FFT-013-credit-card-pdf-import | Import password-protected credit card PDF |
 
 ---
 

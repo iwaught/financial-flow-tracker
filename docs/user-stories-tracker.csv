@@ -9,3 +9,4 @@ US-FFT-007,Save and load flow state,Done,,,"Implemented Save and Load buttons us
 US-FFT-008,Main box contribution breakdown panel,Done,,,"Click main status node to show detailed breakdown of income/expense sources with percentages, updates dynamically"
 US-FFT-009,Delete nodes and connections,Done,,,"Nodes can be deleted with delete key, connections auto-removed, main status node protected from deletion, calculations update immediately"
 US-FFT-010,Custom node labels,Done,,,"Double-click label to edit, updates immediately, labels preserved in save/load, supports any text input, default labels provided"
+US-FFT-013,Import Password-Protected Credit Card Statement PDF,Done,,,"Import PDF with password support, extract up to 2 payment amounts, detect currency, convert to USD via Frankfurter API, auto-create/update 'Credit Card Expense' node connected to main status"

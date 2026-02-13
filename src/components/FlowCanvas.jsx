@@ -11,6 +11,10 @@ import ReactFlow, {
   Position,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
+import * as pdfjsLib from 'pdfjs-dist'
+
+// Configure PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
 
 // Custom node component with editable value
 const EditableNode = ({ data, id }) => {
@@ -280,6 +284,13 @@ const FlowCanvas = () => {
   const nodeIdRef = useRef(5)
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  
+  // PDF import state
+  const [pdfFile, setPdfFile] = useState(null)
+  const [pdfPassword, setPdfPassword] = useState('')
+  const [isImporting, setIsImporting] = useState(false)
+  const [importMessage, setImportMessage] = useState('')
+  const fileInputRef = useRef(null)
 
   // Handle value changes for nodes
   const handleValueChange = useCallback((nodeId, newValue) => {
@@ -761,6 +772,301 @@ const FlowCanvas = () => {
     }
   }
 
+  // Helper function to detect currency from text
+  const detectCurrency = (text, amount) => {
+    // Check for currency symbols or ISO codes near the amount
+    const currencyPatterns = [
+      { pattern: /\$|USD/i, code: 'USD' },
+      { pattern: /€|EUR/i, code: 'EUR' },
+      { pattern: /£|GBP/i, code: 'GBP' },
+      { pattern: /¥|JPY/i, code: 'JPY' },
+      { pattern: /CNY/i, code: 'CNY' },
+      { pattern: /CAD/i, code: 'CAD' },
+      { pattern: /AUD/i, code: 'AUD' },
+      { pattern: /CHF/i, code: 'CHF' },
+    ]
+
+    for (const { pattern, code } of currencyPatterns) {
+      if (pattern.test(text)) {
+        return code
+      }
+    }
+
+    return 'USD' // Default to USD
+  }
+
+  // Helper function to extract payment amounts from PDF text
+  const extractPaymentAmounts = (text) => {
+    const payments = []
+    
+    // Keywords that typically indicate payment amounts
+    const keywords = [
+      'payment due',
+      'total payment',
+      'amount due',
+      'total due',
+      'minimum payment',
+      'new balance',
+      'total balance',
+      'payment amount',
+      'amount owed',
+    ]
+
+    // Split text into lines for better processing
+    const lines = text.split('\n')
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].toLowerCase()
+      
+      // Check if line contains a payment keyword
+      const hasKeyword = keywords.some(keyword => line.includes(keyword))
+      
+      if (hasKeyword) {
+        // Look for amounts in this line and nearby lines
+        const searchText = lines.slice(Math.max(0, i - 1), Math.min(lines.length, i + 3)).join(' ')
+        
+        // Match currency amounts with various formats
+        // Supports: 1,234.56 | 1234.56 | 1.234,56 (European format)
+        const amountRegex = /(?:[\$€£¥]|\b)(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?|\d{1,3}(?:\.\d{3})*(?:,\d{2})?)/g
+        let match
+        
+        while ((match = amountRegex.exec(searchText)) !== null) {
+          let amountStr = match[1].replace(/[\s]/g, '') // Remove spaces
+          
+          // Determine if European format (comma as decimal)
+          const commaCount = (amountStr.match(/,/g) || []).length
+          const dotCount = (amountStr.match(/\./g) || []).length
+          
+          let amount
+          if (commaCount === 1 && dotCount === 0) {
+            // European format: 1.234,56 -> 1234.56
+            amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.'))
+          } else {
+            // US format: 1,234.56 -> 1234.56
+            amount = parseFloat(amountStr.replace(/,/g, ''))
+          }
+          
+          // Only include amounts that seem reasonable for credit card bills
+          if (!isNaN(amount) && amount > 10 && amount < 1000000) {
+            const currency = detectCurrency(searchText, amount)
+            payments.push({
+              amount,
+              currency,
+              context: line.trim(),
+            })
+          }
+        }
+      }
+    }
+
+    // Remove duplicates and keep top 2 highest amounts
+    const uniquePayments = []
+    const seen = new Set()
+    
+    for (const payment of payments) {
+      const key = `${payment.amount}-${payment.currency}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        uniquePayments.push(payment)
+      }
+    }
+
+    // Sort by amount descending and take top 2
+    return uniquePayments.sort((a, b) => b.amount - a.amount).slice(0, 2)
+  }
+
+  // Helper function to get FX rate from Frankfurter API
+  const getFxRate = async (fromCurrency, toCurrency = 'USD') => {
+    if (fromCurrency === toCurrency) {
+      return { rate: 1, date: new Date().toISOString().split('T')[0] }
+    }
+
+    try {
+      // Use latest endpoint for daily spot rate
+      const response = await fetch(`https://api.frankfurter.app/latest?from=${fromCurrency}&to=${toCurrency}`)
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch exchange rate: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      return {
+        rate: data.rates[toCurrency],
+        date: data.date,
+      }
+    } catch (error) {
+      throw new Error(`FX conversion failed: ${error.message}`)
+    }
+  }
+
+  // Main PDF import handler
+  const handlePdfImport = async () => {
+    if (!pdfFile) {
+      setImportMessage('Please select a PDF file')
+      return
+    }
+
+    setIsImporting(true)
+    setImportMessage('Importing...')
+
+    try {
+      // Read PDF file as ArrayBuffer
+      const arrayBuffer = await pdfFile.arrayBuffer()
+      
+      // Load PDF document
+      let loadingTask
+      try {
+        loadingTask = pdfjsLib.getDocument({
+          data: arrayBuffer,
+          password: pdfPassword || undefined,
+        })
+        
+        const pdf = await loadingTask.promise
+        
+        // Extract text from all pages
+        let fullText = ''
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i)
+          const textContent = await page.getTextContent()
+          const pageText = textContent.items.map(item => item.str).join(' ')
+          fullText += pageText + '\n'
+        }
+
+        // Extract payment amounts
+        const payments = extractPaymentAmounts(fullText)
+        
+        if (payments.length === 0) {
+          setImportMessage('No payment amounts found in PDF')
+          setIsImporting(false)
+          return
+        }
+
+        // Convert to USD and sum
+        let totalUsd = 0
+        const conversions = []
+        let fxDate = null
+
+        for (const payment of payments) {
+          const fxResult = await getFxRate(payment.currency, 'USD')
+          const usdAmount = payment.amount * fxResult.rate
+          totalUsd += usdAmount
+          
+          if (!fxDate) {
+            fxDate = fxResult.date
+          }
+
+          conversions.push({
+            original: payment.amount,
+            currency: payment.currency,
+            rate: fxResult.rate,
+            usd: usdAmount,
+          })
+        }
+
+        // Round to 2 decimals
+        totalUsd = Math.round(totalUsd * 100) / 100
+
+        // Find or create Credit Card Expense node
+        let ccNode = nodes.find(n => n.data.importSource === 'credit-card-pdf')
+        
+        if (ccNode) {
+          // Update existing node
+          setNodes((nds) =>
+            nds.map((node) => {
+              if (node.id === ccNode.id) {
+                return {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    value: totalUsd,
+                    onValueChange: handleValueChange,
+                    onLabelChange: handleLabelChange,
+                  },
+                }
+              }
+              return node
+            })
+          )
+        } else {
+          // Create new node
+          const newNode = {
+            id: `${nodeIdRef.current++}`,
+            type: 'editable',
+            data: {
+              label: 'Credit Card Expense',
+              nodeType: 'expense',
+              value: totalUsd,
+              importSource: 'credit-card-pdf', // Marker for future updates
+              onValueChange: handleValueChange,
+              onLabelChange: handleLabelChange,
+            },
+            position: {
+              x: Math.random() * 300 + 600,
+              y: Math.random() * 300 + 50,
+            },
+            style: {
+              background: '#FEE2E2',
+              border: '2px solid #EF4444',
+              borderRadius: '8px',
+              padding: '12px',
+              width: 150,
+            },
+          }
+          
+          // Store the new node ID for edge creation
+          const newNodeId = newNode.id
+          setNodes((nds) => nds.concat(newNode))
+          ccNode = newNode
+
+          // Create edge from node to main status node
+          setEdges((eds) => {
+            const edgeExists = eds.some(e => e.source === newNodeId && e.target === '1')
+            if (!edgeExists) {
+              return eds.concat({
+                id: `e${newNodeId}-1`,
+                source: newNodeId,
+                target: '1',
+                type: 'default',
+              })
+            }
+            return eds
+          })
+        }
+
+        // Show success message
+        const successMsg = `Import successful!\n` +
+          `Extracted ${payments.length} payment(s)\n` +
+          `Total: $${totalUsd.toFixed(2)} USD` +
+          (fxDate ? `\nFX Date: ${fxDate}` : '')
+        
+        setImportMessage(successMsg)
+        
+        // Clear after 5 seconds
+        setTimeout(() => {
+          setImportMessage('')
+          setPdfFile(null)
+          setPdfPassword('')
+          if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+          }
+        }, 5000)
+
+      } catch (pdfError) {
+        if (pdfError.name === 'PasswordException') {
+          setImportMessage('Wrong password. Please try again.')
+        } else {
+          throw pdfError
+        }
+      }
+
+    } catch (error) {
+      console.error('PDF import error:', error)
+      setImportMessage(`Error: ${error.message}`)
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
   return (
     <div className="w-full h-full relative">
       <div className="absolute top-4 left-4 z-10 flex gap-3 flex-wrap">
@@ -806,6 +1112,49 @@ const FlowCanvas = () => {
         >
           📂 Load
         </button>
+      </div>
+
+      {/* PDF Import Section */}
+      <div className="absolute top-4 right-4 z-10 bg-white p-4 rounded-lg shadow-lg" style={{ maxWidth: '350px' }}>
+        <h3 className="text-sm font-bold mb-2">Import Credit Card PDF</h3>
+        <div className="flex flex-col gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf"
+            onChange={(e) => setPdfFile(e.target.files[0])}
+            className="text-xs border border-gray-300 rounded px-2 py-1"
+          />
+          <input
+            type="password"
+            placeholder="PDF Password (if needed)"
+            value={pdfPassword}
+            onChange={(e) => setPdfPassword(e.target.value)}
+            className="text-xs border border-gray-300 rounded px-2 py-1"
+          />
+          <button
+            onClick={handlePdfImport}
+            disabled={isImporting || !pdfFile}
+            className={`px-3 py-2 text-white font-semibold rounded-lg shadow transition-colors duration-200 text-sm ${
+              isImporting || !pdfFile
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-orange-500 hover:bg-orange-600'
+            }`}
+          >
+            {isImporting ? '⏳ Importing...' : '📄 Import PDF'}
+          </button>
+          {importMessage && (
+            <div className={`text-xs p-2 rounded ${
+              importMessage.includes('Error') || importMessage.includes('Wrong password') || importMessage.includes('No payment')
+                ? 'bg-red-100 text-red-700'
+                : importMessage.includes('successful')
+                ? 'bg-green-100 text-green-700'
+                : 'bg-blue-100 text-blue-700'
+            }`} style={{ whiteSpace: 'pre-line' }}>
+              {importMessage}
+            </div>
+          )}
+        </div>
       </div>
       
       <ReactFlow
