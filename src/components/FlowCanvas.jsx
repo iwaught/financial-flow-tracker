@@ -776,16 +776,34 @@ const FlowCanvas = () => {
 
   // Helper function to detect currency from text
   const detectCurrency = (text, amount) => {
-    // Check for currency symbols or ISO codes near the amount
+    // Check for explicit CLP indicators first (highest priority)
+    const clpIndicators = [
+      /\bclp\b/i,
+      /peso\s*chileno/i,
+      /pesos\s*chilenos/i,
+      /scotiabank\s*chile/i,
+      /banco\s*de\s*chile/i,
+      /\bchile\s+(bank|peso|pesos)\b/i,
+    ]
+    
+    for (const pattern of clpIndicators) {
+      if (pattern.test(text)) {
+        return 'CLP'
+      }
+    }
+    
+    // Check for other specific currency codes/symbols
+    // Note: $ is ambiguous - could be USD, CLP, CAD, AUD, etc.
+    // Only match $ as USD if we don't have CLP context
     const currencyPatterns = [
-      { pattern: /\$|USD/i, code: 'USD' },
-      { pattern: /€|EUR/i, code: 'EUR' },
-      { pattern: /£|GBP/i, code: 'GBP' },
-      { pattern: /¥|JPY/i, code: 'JPY' },
-      { pattern: /CNY/i, code: 'CNY' },
-      { pattern: /CAD/i, code: 'CAD' },
-      { pattern: /AUD/i, code: 'AUD' },
-      { pattern: /CHF/i, code: 'CHF' },
+      { pattern: /€|\bEUR\b/i, code: 'EUR' },
+      { pattern: /£|\bGBP\b/i, code: 'GBP' },
+      { pattern: /¥|\bJPY\b/i, code: 'JPY' },
+      { pattern: /\bCNY\b/i, code: 'CNY' },
+      { pattern: /\bCAD\b/i, code: 'CAD' },
+      { pattern: /\bAUD\b/i, code: 'AUD' },
+      { pattern: /\bCHF\b/i, code: 'CHF' },
+      { pattern: /\bUSD\b/i, code: 'USD' },
     ]
 
     for (const { pattern, code } of currencyPatterns) {
@@ -793,8 +811,29 @@ const FlowCanvas = () => {
         return code
       }
     }
+    
+    // If we see $ but no explicit USD marker, check for Chilean-specific context
+    if (/\$/.test(text)) {
+      const lowerText = text.toLowerCase()
+      
+      // Check for Chilean-specific payment terms or context
+      const chileanTerms = [
+        /información\s*de\s*pago/i, // "payment information" section header
+        /scotiabank/i,
+        /banco\s*de\s*chile/i,
+      ]
+      
+      for (const pattern of chileanTerms) {
+        if (pattern.test(lowerText)) {
+          return 'CLP' // Strong Chilean context with $
+        }
+      }
+      
+      // Default $ to USD if no specific Chilean context
+      return 'USD'
+    }
 
-    return 'USD' // Default to USD
+    return 'USD' // Final fallback to USD
   }
 
   // Helper function to extract payment amounts from PDF text
@@ -815,7 +854,7 @@ const FlowCanvas = () => {
       'amount owed',
       'current balance',
       'statement balance',
-      // Spanish
+      // Spanish / Chilean
       'pago total',
       'pago mínimo',
       'saldo total',
@@ -824,6 +863,10 @@ const FlowCanvas = () => {
       'total a pagar',
       'importe total',
       'cuota',
+      'monto total facturado',
+      'monto mínimo a pagar',
+      'monto total facturado a pagar',
+      'información de pago',
     ]
 
     // Split text into lines for better processing
@@ -840,28 +883,65 @@ const FlowCanvas = () => {
         const searchText = lines.slice(Math.max(0, i - 1), Math.min(lines.length, i + 3)).join(' ')
         
         // Match currency amounts with various formats
-        // Supports: 1,234.56 | 1234.56 | 1.234,56 (European format)
-        const amountRegex = /(?:[\$€£¥]|\b)(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?|\d{1,3}(?:\.\d{3})*(?:,\d{2})?)/g
+        // Supports: 1,234.56 | 1234.56 | 1.234,56 (European) | 2.130.004 (Chilean/pure thousands)
+        const amountRegex = /(?:[\$€£¥]|\b)(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?|\d{1,3}(?:\.\d{3})+(?:,\d{2})?|\d{1,3}(?:\.\d{3})+)/g
         let match
         
         while ((match = amountRegex.exec(searchText)) !== null) {
           let amountStr = match[1].replace(/[\s]/g, '') // Remove spaces
           
-          // Determine if European format (comma as decimal)
+          // Determine format based on separators and their positions
           const commaCount = (amountStr.match(/,/g) || []).length
           const dotCount = (amountStr.match(/\./g) || []).length
           
           let amount
-          if (commaCount === 1 && dotCount === 0) {
+          
+          // Case 1: Pure thousands with dots (Chilean format like 2.130.004)
+          // Multiple dots with 3-digit groups
+          if (dotCount > 1 && commaCount === 0) {
+            // Multiple dots: thousands separator format like 2.130.004 -> 2130004
+            amount = parseFloat(amountStr.replace(/\./g, ''))
+          }
+          // Case 2: Single dot with 3 trailing digits - ambiguous case
+          // Could be thousands (800.000 CLP) or decimal (123.456 USD)
+          // Use amount magnitude as heuristic: large amounts likely use thousands separator
+          else if (dotCount === 1 && commaCount === 0 && /\.\d{3}$/.test(amountStr)) {
+            const baseAmount = parseFloat(amountStr.substring(0, amountStr.indexOf('.')))
+            // If base amount is >= 100, more likely to be thousands separator
+            if (baseAmount >= 100) {
+              amount = parseFloat(amountStr.replace(/\./g, ''))
+            } else {
+              // Small base amount, treat as decimal
+              amount = parseFloat(amountStr)
+            }
+          }
+          // Case 3: US format with comma thousands and dot decimal (1,234.56)
+          // Commas for thousands, dot for decimal (last part has 1-2 digits)
+          else if (commaCount >= 1 && dotCount === 1 && /,\d{3}\.\d{1,2}$/.test(amountStr)) {
+            // US format: 1,234.56 -> 1234.56
+            amount = parseFloat(amountStr.replace(/,/g, ''))
+          }
+          // Case 4: European format with dot thousands and comma decimal (1.234,56)
+          // Dots for thousands, comma for decimal (last part has 1-2 digits)
+          else if (dotCount >= 1 && commaCount === 1 && /\.\d{3},\d{1,2}$/.test(amountStr)) {
             // European format: 1.234,56 -> 1234.56
             amount = parseFloat(amountStr.replace(/\./g, '').replace(',', '.'))
-          } else {
-            // US format: 1,234.56 -> 1234.56
+          }
+          // Case 5: European format with only comma decimal (1234,56)
+          else if (commaCount === 1 && dotCount === 0 && /,\d{1,2}$/.test(amountStr)) {
+            // Could be European decimal: 1234,56 -> 1234.56
+            amount = parseFloat(amountStr.replace(',', '.'))
+          }
+          // Case 6: US format with only comma thousands (1,234) or plain number
+          else {
+            // US format or plain: remove commas
             amount = parseFloat(amountStr.replace(/,/g, ''))
           }
           
           // Only include amounts that seem reasonable for credit card bills
-          if (!isNaN(amount) && amount > 10 && amount < 1000000) {
+          // Max amount set high to accommodate large CLP amounts
+          const MAX_CREDIT_CARD_AMOUNT = 100000000 // 100 million in any currency
+          if (!isNaN(amount) && amount > 10 && amount < MAX_CREDIT_CARD_AMOUNT) {
             const currency = detectCurrency(searchText, amount)
             payments.push({
               amount,
